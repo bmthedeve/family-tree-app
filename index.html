@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Family Graph</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside id="sidebar" class="panel">
+        <div class="panel-header">
+          <p class="eyebrow">Family Graph</p>
+          <h1>Relationship Explorer</h1>
+          <p class="panel-copy">
+            Build a real-world family network with parents, spouses, and siblings.
+          </p>
+        </div>
+
+        <section class="card">
+          <h2>Add Person</h2>
+          <form id="person-form" class="form-grid">
+            <label>
+              <span>Name</span>
+              <input type="text" id="name" name="name" required placeholder="Full name" />
+            </label>
+            <label>
+              <span>Gender</span>
+              <select id="gender" name="gender" required>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </label>
+            <label>
+              <span>Date of Birth</span>
+              <input type="date" id="dob" name="dob" />
+            </label>
+            <label>
+              <span>Date of Death</span>
+              <input type="date" id="dod" name="dod" />
+            </label>
+            <div class="form-actions">
+              <button id="person-submit" type="submit" class="primary-button">Add Person</button>
+              <button id="person-cancel" type="button" class="secondary-button hidden-button">Cancel Edit</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2>Add Relationship</h2>
+          <form id="relationship-form" class="form-grid">
+            <label>
+              <span>Person A</span>
+              <select id="person-a" required></select>
+            </label>
+            <label>
+              <span>Relationship</span>
+              <select id="relationship-type" required>
+                <option value="parent">Parent</option>
+                <option value="child">Child</option>
+                <option value="spouse">Spouse</option>
+                <option value="sibling">Sibling</option>
+              </select>
+            </label>
+            <label>
+              <span>Person B</span>
+              <select id="person-b" required></select>
+            </label>
+            <button type="submit" class="primary-button">Add Relationship</button>
+          </form>
+        </section>
+
+        <section class="card actions-card">
+          <h2>Graph Actions</h2>
+          <div class="action-list">
+            <button id="layout-button" type="button" class="secondary-button">Re-run Layout</button>
+            <button id="reset-view-button" type="button" class="secondary-button">Reset View</button>
+            <button id="export-button" type="button" class="secondary-button">Export PNG</button>
+            <button id="export-data-button" type="button" class="secondary-button">Export Family File</button>
+            <button id="import-data-button" type="button" class="secondary-button">Import Family File</button>
+            <input id="import-data-input" type="file" accept=".familygraph.json,application/json" hidden />
+          </div>
+          <div id="stats" class="stats"></div>
+        </section>
+
+        <section class="card legend-card">
+          <h2>Legend</h2>
+          <div class="legend-list">
+            <div><span class="legend-swatch male"></span> Male</div>
+            <div><span class="legend-swatch female"></span> Female</div>
+            <div><span class="legend-line parent"></span> Parent</div>
+            <div><span class="legend-line spouse"></span> Spouse</div>
+            <div><span class="legend-line sibling"></span> Sibling</div>
+          </div>
+        </section>
+
+        <div id="message" class="message" aria-live="polite"></div>
+      </aside>
+
+      <main class="canvas-wrap">
+        <div class="canvas-header">
+          <div>
+            <p class="eyebrow">Infinite Canvas</p>
+            <h2>Family Relationship Map</h2>
+          </div>
+          <div class="canvas-tools">
+            <button id="expand-canvas-button" type="button" class="expand-button" aria-label="Open canvas in a new tab">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M14 5h5v5"></path>
+                <path d="M10 14 19 5"></path>
+                <path d="M19 14v5h-14v-14h5"></path>
+              </svg>
+            </button>
+            <div class="view-switch" role="tablist" aria-label="View switcher">
+              <button id="canvas-tab" type="button" class="view-tab active" aria-selected="true">Canvas</button>
+              <button id="table-tab" type="button" class="view-tab" aria-selected="false">Table</button>
+            </div>
+            <p class="canvas-help">
+              Scroll to zoom, drag the background to pan, shift-drag to area-select, drag selected nodes together, and double-click the background to reset.
+            </p>
+          </div>
+        </div>
+        <div id="canvas-view" class="view-panel active">
+          <div id="cy"></div>
+        </div>
+        <div id="table-view" class="view-panel hidden">
+          <div class="table-wrap">
+            <table class="members-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Gender</th>
+                  <th>DOB</th>
+                  <th>DOD</th>
+                  <th>Parents</th>
+                  <th>Children</th>
+                  <th>Siblings</th>
+                  <th>Spouses</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="people-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="tooltip" class="tooltip hidden"></div>
+      </main>
+      <div
+        id="sidebar-resize-handle"
+        class="sidebar-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+      ></div>
+    </div>
+
+    <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
