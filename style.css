@@ -276,6 +276,24 @@ button:hover {
   height: 20px;
 }
 
+.sidebar-toggle-chevron {
+  transform-origin: 13.5px 12px;
+  transition: transform 180ms ease;
+}
+
+body.sidebar-collapsed .app-shell {
+  grid-template-columns: 1fr;
+}
+
+body.sidebar-collapsed .panel,
+body.sidebar-collapsed .sidebar-resize-handle {
+  display: none;
+}
+
+body.sidebar-collapsed .sidebar-toggle-chevron {
+  transform: rotate(180deg);
+}
+
 .view-switch {
   display: inline-flex;
   flex-shrink: 0;

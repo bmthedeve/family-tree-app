@@ -2,6 +2,10 @@
 
 A lightweight, browser-based family relationship explorer. Build and edit a family network, view it as an interactive graph or table, and save it locally or export it for later use.
 
+## Live app
+
+Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthedeve.github.io/family-tree-app/)
+
 ## Features
 
 - Add, edit, and delete family members
@@ -11,9 +15,10 @@ A lightweight, browser-based family relationship explorer. Build and edit a fami
 - Select multiple people with <kbd>Shift</kbd> + drag and move them together
 - Highlight a person's immediate family by selecting their node
 - Switch between graph and table views
+- Collapse the sidebar for a full-width canvas and restore it when needed
 - Export the graph as a PNG image
 - Export and import an editable `.familygraph.json` file
-- Preserve family data, node positions, and sidebar width in browser storage
+- Preserve family data, node positions, sidebar width, and sidebar visibility in browser storage
 - Open a distraction-free canvas in a separate tab
 
 ## Run locally
@@ -35,8 +40,9 @@ The Cytoscape.js library and Manrope font are loaded from public CDNs, so an int
 1. Add people from the sidebar.
 2. Choose two people and define their relationship.
 3. Drag nodes to organize the graph, scroll to zoom, or drag the background to pan.
-4. Use **Re-run Layout** to automatically arrange the family network.
-5. Use **Export Family File** to create an editable backup that can later be restored with **Import Family File**.
+4. Use the sidebar button in the canvas header to toggle between editing controls and a full-width canvas.
+5. Use **Re-run Layout** to automatically arrange the family network.
+6. Use **Export Family File** to create an editable backup that can later be restored with **Import Family File**.
 
 Family data is automatically saved to the browser's `localStorage`. Clearing site data will remove that saved copy, so export a family file for a portable backup.
 

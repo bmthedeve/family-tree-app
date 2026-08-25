@@ -1,5 +1,6 @@
 const STORAGE_KEY = "family-tree-app-data-v1";
 const SIDEBAR_WIDTH_KEY = "family-tree-sidebar-width-v1";
+const SIDEBAR_COLLAPSED_KEY = "family-tree-sidebar-collapsed-v1";
 
 const sampleData = {
   people: [
@@ -57,6 +58,7 @@ const refs = {
   importDataButton: document.getElementById("import-data-button"),
   importDataInput: document.getElementById("import-data-input"),
   expandCanvasButton: document.getElementById("expand-canvas-button"),
+  sidebarToggleButton: document.getElementById("sidebar-toggle-button"),
   sidebar: document.getElementById("sidebar"),
   resizeHandle: document.getElementById("sidebar-resize-handle"),
   canvasTab: document.getElementById("canvas-tab"),
@@ -78,6 +80,7 @@ initialize();
 function initialize() {
   applyMode();
   restoreSidebarWidth();
+  restoreSidebarState();
   normalizeState();
   setupCy();
   populatePersonSelects();
@@ -312,6 +315,7 @@ function attachEvents() {
   refs.importDataButton.addEventListener("click", () => refs.importDataInput.click());
   refs.importDataInput.addEventListener("change", importFamilyFile);
   refs.expandCanvasButton.addEventListener("click", openCanvasOnlyView);
+  refs.sidebarToggleButton.addEventListener("click", toggleSidebar);
   refs.canvasTab.addEventListener("click", () => setActiveView("canvas"));
   refs.tableTab.addEventListener("click", () => setActiveView("table"));
   refs.personCancel.addEventListener("click", resetPersonForm);
@@ -869,6 +873,34 @@ function openCanvasOnlyView() {
   const url = new URL(window.location.href);
   url.searchParams.set("view", "canvas");
   window.open(url.toString(), "_blank", "noopener,noreferrer");
+}
+
+function toggleSidebar() {
+  const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(isCollapsed));
+  updateSidebarToggle(isCollapsed);
+
+  requestAnimationFrame(() => {
+    cy.resize();
+    cy.fit(undefined, getFitPadding());
+  });
+}
+
+function restoreSidebarState() {
+  if (isCanvasOnlyMode) {
+    return;
+  }
+
+  const isCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+  document.body.classList.toggle("sidebar-collapsed", isCollapsed);
+  updateSidebarToggle(isCollapsed);
+}
+
+function updateSidebarToggle(isCollapsed) {
+  const action = isCollapsed ? "Show" : "Hide";
+  refs.sidebarToggleButton.setAttribute("aria-expanded", String(!isCollapsed));
+  refs.sidebarToggleButton.setAttribute("aria-label", `${action} sidebar`);
+  refs.sidebarToggleButton.title = `${action} sidebar`;
 }
 
 function handleWindowResize() {
