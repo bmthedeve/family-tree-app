@@ -9,7 +9,9 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 ## Features
 
 - Add, edit, and delete family members
-- Record parent, child, spouse, and sibling relationships
+- Search for a person by name and jump directly to their highlighted graph node
+- Record, edit, and delete parent, child, spouse, and sibling relationships
+- Track current/former spouse status and relationship start/end dates
 - Prevent duplicate, self-referential, and circular ancestor relationships
 - Explore relationships on an interactive, zoomable Cytoscape.js canvas
 - Select multiple people with <kbd>Shift</kbd> + drag and move them together
@@ -19,6 +21,9 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Export the graph as a PNG image
 - Export and import an editable `.familygraph.json` file
 - Preserve family data, node positions, sidebar width, and sidebar visibility in browser storage
+- Undo and redo up to 50 data changes with keyboard shortcuts
+- Review relationship impact before deleting a person
+- Restore deleted people and their surviving connections from the Recycle Bin
 - Open a distraction-free canvas in a separate tab
 
 ## Run locally
@@ -38,11 +43,15 @@ The Cytoscape.js library and Manrope font are loaded from public CDNs, so an int
 ## Using the app
 
 1. Add people from the sidebar.
-2. Choose two people and define their relationship.
-3. Drag nodes to organize the graph, scroll to zoom, or drag the background to pan.
-4. Use the sidebar button in the canvas header to toggle between editing controls and a full-width canvas.
-5. Use **Re-run Layout** to automatically arrange the family network.
-6. Use **Export Family File** to create an editable backup that can later be restored with **Import Family File**.
+2. Use **Find Person** to search by name, then select a result to center and highlight that person.
+3. Choose two people and define their relationship. Spouse relationships can include status and dates.
+4. Select a graph edge or use **Manage Relationships** to edit or delete a connection.
+5. Drag nodes to organize the graph, scroll to zoom, or drag the background to pan.
+6. Use the sidebar button in the canvas header to toggle between editing controls and a full-width canvas.
+7. Use **Re-run Layout** to automatically arrange the family network.
+8. Use **Export Family File** to create an editable backup that can later be restored with **Import Family File**.
+
+Use the on-screen controls or <kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> to undo and <kbd>Ctrl/Cmd</kbd> + <kbd>Y</kbd> (or <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>) to redo. Deleted people remain available in the Recycle Bin until they are permanently removed.
 
 Family data is automatically saved to the browser's `localStorage`. Clearing site data will remove that saved copy, so export a family file for a portable backup.
 

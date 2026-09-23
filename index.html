@@ -23,6 +23,15 @@
           </p>
         </div>
 
+        <section class="card search-card">
+          <h2>Find Person</h2>
+          <label>
+            <span>Search by name</span>
+            <input type="search" id="person-search" placeholder="Start typing a name" autocomplete="off" />
+          </label>
+          <div id="search-results" class="search-results" role="listbox" aria-label="Matching people"></div>
+        </section>
+
         <section class="card">
           <h2>Add Person</h2>
           <form id="person-form" class="form-grid">
@@ -72,6 +81,23 @@
               <span>Person B</span>
               <select id="person-b" required></select>
             </label>
+            <div id="new-spouse-details" class="spouse-details hidden">
+              <label>
+                <span>Relationship status</span>
+                <select id="relationship-status">
+                  <option value="current">Current</option>
+                  <option value="former">Former</option>
+                </select>
+              </label>
+              <label>
+                <span>Start date</span>
+                <input type="date" id="relationship-start-date" />
+              </label>
+              <label>
+                <span>End date</span>
+                <input type="date" id="relationship-end-date" />
+              </label>
+            </div>
             <button type="submit" class="primary-button">Add Relationship</button>
           </form>
         </section>
@@ -79,6 +105,12 @@
         <section class="card actions-card">
           <h2>Graph Actions</h2>
           <div class="action-list">
+            <div class="history-actions">
+              <button id="undo-button" type="button" class="secondary-button" disabled>Undo</button>
+              <button id="redo-button" type="button" class="secondary-button" disabled>Redo</button>
+            </div>
+            <button id="manage-relationships-button" type="button" class="secondary-button">Manage Relationships</button>
+            <button id="recycle-bin-button" type="button" class="secondary-button">Recycle Bin <span id="recycle-count"></span></button>
             <button id="layout-button" type="button" class="secondary-button">Re-run Layout</button>
             <button id="reset-view-button" type="button" class="secondary-button">Reset View</button>
             <button id="export-button" type="button" class="secondary-button">Export PNG</button>
@@ -173,6 +205,94 @@
         aria-orientation="vertical"
         aria-label="Resize sidebar"
       ></div>
+    </div>
+
+    <dialog id="delete-person-dialog" class="app-dialog">
+      <form method="dialog" class="dialog-card">
+        <p class="eyebrow">Confirm deletion</p>
+        <h2 id="delete-person-title">Delete person?</h2>
+        <p id="delete-person-copy" class="dialog-copy"></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary-button">Cancel</button>
+          <button id="confirm-delete-person" value="confirm" class="danger-button">Move to Recycle Bin</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="relationships-dialog" class="app-dialog wide-dialog">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Family connections</p>
+            <h2 id="relationships-dialog-title">Manage Relationships</h2>
+          </div>
+          <button id="close-relationships-dialog" type="button" class="icon-button" aria-label="Close relationship manager">×</button>
+        </div>
+        <div id="relationships-list" class="relationship-list"></div>
+      </div>
+    </dialog>
+
+    <dialog id="relationship-editor-dialog" class="app-dialog">
+      <form id="relationship-editor-form" class="dialog-card">
+        <p class="eyebrow">Edit connection</p>
+        <h2>Edit Relationship</h2>
+        <input type="hidden" id="edit-relationship-key" />
+        <div class="form-grid">
+          <label><span>Person A</span><select id="edit-person-a" required></select></label>
+          <label>
+            <span>Relationship</span>
+            <select id="edit-relationship-type" required>
+              <option value="parent">Parent</option>
+              <option value="child">Child</option>
+              <option value="spouse">Spouse</option>
+              <option value="sibling">Sibling</option>
+            </select>
+          </label>
+          <label><span>Person B</span><select id="edit-person-b" required></select></label>
+          <div id="edit-spouse-details" class="spouse-details hidden">
+            <label>
+              <span>Relationship status</span>
+              <select id="edit-relationship-status">
+                <option value="current">Current</option>
+                <option value="former">Former</option>
+              </select>
+            </label>
+            <label><span>Start date</span><input type="date" id="edit-relationship-start-date" /></label>
+            <label><span>End date</span><input type="date" id="edit-relationship-end-date" /></label>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button id="cancel-relationship-edit" type="button" class="secondary-button">Cancel</button>
+          <button type="submit" class="primary-button">Save Relationship</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="delete-relationship-dialog" class="app-dialog">
+      <form method="dialog" class="dialog-card">
+        <p class="eyebrow">Confirm deletion</p>
+        <h2>Delete relationship?</h2>
+        <p id="delete-relationship-copy" class="dialog-copy"></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary-button">Cancel</button>
+          <button id="confirm-delete-relationship" value="confirm" class="danger-button">Delete Relationship</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="recycle-bin-dialog" class="app-dialog wide-dialog">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Recover deleted people</p><h2>Recycle Bin</h2></div>
+          <button id="close-recycle-bin" type="button" class="icon-button" aria-label="Close recycle bin">×</button>
+        </div>
+        <div id="recycle-bin-list" class="relationship-list"></div>
+      </div>
+    </dialog>
+
+    <div id="undo-toast" class="undo-toast" role="status" aria-live="polite" hidden>
+      <span id="undo-toast-message"></span>
+      <button id="toast-undo-button" type="button">Undo</button>
     </div>
 
     <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>

@@ -196,3 +196,19 @@ Please read PROJECT_NOTES.md in the family-tree-app repo and continue from the c
 ## Note
 
 I can continue updating this file as we make more changes in this chat.
+
+## Safety, Relationship Management, and Search
+
+Implemented:
+
+- Confirmation before deleting a person, including the number of affected relationships
+- Recycle Bin with restore and permanent-delete actions
+- Undo/redo history for person, relationship, import, and recycle-bin mutations
+- Temporary notifications with a direct Undo action
+- Keyboard shortcuts for undo and redo
+- Canonical relationship manager that hides reverse-link duplication
+- Relationship editing and deletion from the manager or by selecting a graph edge
+- Per-person relationship management from the members table
+- Current/former spouse status and relationship start/end dates
+- Name search with jump-to, centering, and family-neighborhood highlighting
+- Safer escaping of imported names in generated UI
