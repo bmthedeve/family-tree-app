@@ -217,6 +217,7 @@ function getStyles() {
         "font-weight": 700,
         width: 58,
         height: 58,
+        shape: "data(shape)",
         "background-color": "data(color)",
         "border-width": 2,
         "border-color": "#ffffff",
@@ -224,6 +225,7 @@ function getStyles() {
         "overlay-opacity": 0
       }
     },
+    { selector: "node[deceased = 1]", style: { "border-style": "dashed", "border-width": 4, "border-color": "#231d14" } },
     {
       selector: "edge",
       style: {
@@ -272,7 +274,8 @@ function getStyles() {
         width: 6,
         "z-index": 999
       }
-    }
+    },
+    { selector: ".generation-hidden", style: { display: "none" } }
   ];
 }
 
@@ -281,7 +284,7 @@ function buildElements() {
     position: person.position,
     data: {
       id: person.id,
-      label: person.name,
+      ...personNodeData(person),
       color: person.gender === "male" ? "#4a86e8" : "#e878b6",
       fontSize: computeNodeFontSize(person.name),
       gender: person.gender,
@@ -313,6 +316,82 @@ function edgeData(relationship) {
   };
 }
 
+function personNodeData(person) {
+  const deceased = !!(person.deceased || person.dateOfDeath);
+  return {
+    label: `${person.name}${deceased ? " †" : ""}`,
+    shape: person.gender === "male" ? "round-rectangle" : "ellipse",
+    deceased: deceased ? 1 : 0
+  };
+}
+
+function nextPersonPosition() {
+  const nodes = cy.nodes();
+  const visible = nodes.filter(node => node.visible());
+  const anchor = visible.length ? visible[visible.length - 1].position() : { x: 0, y: 0 };
+  if (!nodes.length) return { ...anchor };
+  // Search nearby grid cells without moving any existing member.
+  for (let radius = 1; radius <= nodes.length + 1; radius++) {
+    for (let y = -radius; y <= radius; y++) {
+      for (let x = -radius; x <= radius; x++) {
+        if (Math.max(Math.abs(x), Math.abs(y)) !== radius) continue;
+        const candidate = { x: anchor.x + x * 110, y: anchor.y + y * 110 };
+        if (nodes.every(node => Math.hypot(node.position().x - candidate.x, node.position().y - candidate.y) >= 100)) {
+          return candidate;
+        }
+      }
+    }
+  }
+}
+
+function descendantsOf(personId) {
+  const descendants = new Set();
+  const pending = [...getChildren(personId)];
+  while (pending.length) {
+    const id = pending.pop();
+    if (id === personId || descendants.has(id)) continue;
+    descendants.add(id);
+    pending.push(...getChildren(id));
+  }
+  return descendants;
+}
+
+function applyGenerationVisibility() {
+  const hidden = new Set();
+  state.people.filter(person => person.descendantsCollapsed).forEach(person => {
+    descendantsOf(person.id).forEach(id => hidden.add(id));
+  });
+  cy.batch(() => {
+    cy.nodes().forEach(node => node.toggleClass("generation-hidden", hidden.has(node.id())));
+    cy.edges().forEach(edge => edge.toggleClass("generation-hidden", hidden.has(edge.source().id()) || hidden.has(edge.target().id())));
+  });
+  renderGenerationControls();
+}
+
+function renderGenerationControls() {
+  const controls = document.getElementById("generation-controls");
+  const existing = new Map([...controls.children].map(button => [button.dataset.parentId, button]));
+  const retained = new Set();
+  state.people.forEach(person => {
+    const node = cy.getElementById(person.id);
+    if (!node.nonempty() || !node.visible() || !getChildren(person.id).length) return;
+    const point = node.renderedPosition();
+    const button = existing.get(person.id) || document.createElement("button");
+    retained.add(person.id);
+    button.type = "button";
+    button.className = "generation-toggle";
+    button.dataset.parentId = person.id;
+    button.textContent = person.descendantsCollapsed ? "+" : "−";
+    button.setAttribute("aria-label", `${person.descendantsCollapsed ? "Expand" : "Collapse"} descendants of ${person.name}`);
+    button.setAttribute("aria-expanded", String(!person.descendantsCollapsed));
+    button.title = button.getAttribute("aria-label");
+    button.style.left = `${point.x + node.renderedWidth() / 2}px`;
+    button.style.top = `${point.y - 14}px`;
+    if (!button.parentElement) controls.append(button);
+  });
+  existing.forEach((button, id) => { if (!retained.has(id)) button.remove(); });
+}
+
 function relationshipColor(type) {
   if (type === "parent") {
     return "#33a35c";
@@ -324,6 +403,18 @@ function relationshipColor(type) {
 }
 
 function attachEvents() {
+  document.getElementById("expand-generations").addEventListener("click", () => {
+    state.people.forEach(person => { person.descendantsCollapsed = false; });
+    saveState();
+  });
+  document.getElementById("generation-controls").addEventListener("click", event => {
+    const button = event.target.closest("button[data-parent-id]");
+    if (!button) return;
+    const person = findPerson(button.dataset.parentId);
+    person.descendantsCollapsed = !person.descendantsCollapsed;
+    saveState();
+  });
+  cy.on("render", renderGenerationControls);
   refs.personForm.addEventListener("submit", handleAddPerson);
   refs.relationshipForm.addEventListener("submit", handleAddRelationship);
   refs.relationshipType.addEventListener("change", () => toggleSpouseDetails(refs.relationshipType, refs.newSpouseDetails));
@@ -406,7 +497,9 @@ function handleAddPerson(event) {
     name: String(form.get("name") || document.getElementById("name").value).trim(),
     gender: String(form.get("gender") || document.getElementById("gender").value),
     dateOfBirth: String(form.get("dob") || document.getElementById("dob").value),
-    dateOfDeath: String(form.get("dod") || document.getElementById("dod").value || "")
+    dateOfDeath: String(form.get("dod") || document.getElementById("dod").value || ""),
+    deceased: form.get("deceased") === "on",
+    notes: String(form.get("notes") || "").trim()
   };
 
   try {
@@ -463,12 +556,14 @@ function addPerson(personInput) {
   }
 
   recordHistory(`Add ${person.name}`);
+  person.position = nextPersonPosition();
   state.people.push(person);
   cy.add({
     group: "nodes",
+    position: person.position,
     data: {
       id: person.id,
-      label: person.name,
+      ...personNodeData(person),
       color: person.gender === "male" ? "#4a86e8" : "#e878b6",
       fontSize: computeNodeFontSize(person.name),
       gender: person.gender,
@@ -480,6 +575,7 @@ function addPerson(personInput) {
   refreshStats();
   renderPeopleTable();
   saveState();
+  if (!refs.canvasView.classList.contains("hidden")) cy.fit(cy.elements(":visible"), getFitPadding());
 }
 
 function updatePerson(personInput) {
@@ -514,7 +610,7 @@ function updatePerson(personInput) {
   const node = cy.getElementById(updatedPerson.id);
   if (node.nonempty()) {
     node.data({
-      label: updatedPerson.name,
+      ...personNodeData(updatedPerson),
       color: updatedPerson.gender === "male" ? "#4a86e8" : "#e878b6",
       fontSize: computeNodeFontSize(updatedPerson.name),
       gender: updatedPerson.gender,
@@ -1044,8 +1140,10 @@ function showTooltip(node, renderedPosition) {
 
   refs.tooltip.innerHTML = `
     <strong>${escapeHtml(person.name)}</strong>
+    <div>${escapeHtml(capitalize(person.gender))}${person.deceased || person.dateOfDeath ? " · Deceased †" : ""}</div>
     <div>DOB: ${formatDate(person.dateOfBirth)}</div>
     <div>DOD: ${person.dateOfDeath ? formatDate(person.dateOfDeath) : "N/A"}</div>
+    ${person.notes ? `<div>${escapeHtml(person.notes)}</div>` : ""}
   `;
   refs.tooltip.classList.remove("hidden");
   refs.tooltip.style.left = `${renderedPosition.x + 22}px`;
@@ -1298,6 +1396,8 @@ function startEditingPerson(personId) {
   document.getElementById("gender").value = person.gender;
   document.getElementById("dob").value = person.dateOfBirth || "";
   document.getElementById("dod").value = person.dateOfDeath || "";
+  document.getElementById("deceased").checked = !!(person.deceased || person.dateOfDeath);
+  document.getElementById("person-notes").value = person.notes || "";
   refs.personSubmit.textContent = "Save Changes";
   refs.personCancel.classList.remove("hidden-button");
   refs.personForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1586,6 +1686,11 @@ function handleSearchResultClick(event) {
 }
 
 function jumpToPerson(personId) {
+  // Search must reveal its result even when an ancestor branch is folded.
+  state.people.forEach(person => {
+    if (person.descendantsCollapsed && descendantsOf(person.id).has(personId)) person.descendantsCollapsed = false;
+  });
+  saveState();
   const node = cy.getElementById(personId);
   if (!node.nonempty()) {
     return;
@@ -1625,6 +1730,7 @@ function showMessage(text, isError = false) {
 
 function saveState() {
   saveNodePositions();
+  if (cy) applyGenerationVisibility();
   if (!cloudApplying && cloudStore) {
     cloudStore.queue({ people: state.people, relationships: state.relationships, recycleBin });
   }

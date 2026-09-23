@@ -180,11 +180,13 @@ label span {
 
 input,
 select,
+textarea,
 button {
   font: inherit;
 }
 
 input,
+textarea,
 select {
   width: 100%;
   padding: 12px 14px;
@@ -312,7 +314,19 @@ button:disabled {
 
 .male {
   background: var(--male);
+  border-radius: 2px;
 }
+
+.checkbox-label { display: flex; align-items: center; gap: 8px; }
+.checkbox-label input { width: auto; }
+textarea { resize: vertical; }
+#generation-controls { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.generation-toggle {
+  position: absolute; pointer-events: auto; width: 28px; height: 28px;
+  padding: 0; border-radius: 50%; background: #fffaf1; color: #231d14;
+  border: 2px solid #746c60; font-weight: 800; box-shadow: 0 2px 6px #0003;
+}
+.generation-toggle:hover { transform: none; background: #ffdb6e; }
 
 .female {
   background: var(--female);

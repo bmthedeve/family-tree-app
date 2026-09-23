@@ -2,6 +2,11 @@
 
 ## Current cloud architecture (September 2026)
 
+- New nodes get collision-free positions near visible members; existing positions remain unchanged.
+- Gender is shown with both shape and color. A deceased flag or death date adds a † and dashed border.
+- Person records support optional `notes`, `deceased`, and `descendantsCollapsed` fields in the existing JSON cloud document; no database migration is needed.
+- Per-parent −/+ canvas buttons hide descendants via parent links, preserving nested collapse preferences. Search reveals hidden results; Expand All Generations clears all branch folds.
+
 - Supabase email/password accounts each own one private tree in `family_tree_documents`.
 - New accounts start empty; the former shared sample dataset is no longer loaded.
 - Apply `supabase/migrations/202609230001_private_family_trees.sql` using the dashboard before cloud storage can work. See `supabase/SETUP.md` for redirect URLs and shared Auth considerations.

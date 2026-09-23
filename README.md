@@ -12,6 +12,11 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Empty starting canvas and private cloud storage for each account
 - Save status, retry, draft recovery, and protection against stale-tab overwrites
 - Add, edit, and delete family members
+- Place new members in free space beside existing members without overlapping them
+- Distinguish male members with blue rounded squares and female members with pink circles
+- Mark deceased members with a † and dashed outline, even when their death date is unknown
+- Keep editable notes/metadata for each member
+- Collapse or expand a parent's descendants using its −/+ button; expand every branch from the sidebar
 - Search for a person by name and jump directly to their highlighted graph node
 - Record, edit, and delete parent, child, spouse, and sibling relationships
 - Track current/former spouse status and relationship start/end dates
@@ -57,6 +62,8 @@ The Supabase client, Cytoscape.js library, and Manrope font load from public CDN
 8. Use **Export Family File** to create an editable backup that can later be restored with **Import Family File**.
 
 Use the on-screen controls or <kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> to undo and <kbd>Ctrl/Cmd</kbd> + <kbd>Y</kbd> (or <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>) to redo. Deleted people remain available in the Recycle Bin until they are permanently removed.
+
+Use the pencil icon to edit a person's notes or deceased status. A death date also marks a person as deceased. Hover over a member to read their notes. Generation controls hide all descendants reachable through parent links, including shared descendants; no people or relationships are deleted. Nested collapsed branches remain collapsed when their ancestor is expanded. Search automatically opens branches hiding its result. Notes and branch preferences are saved with your tree and included in family-file exports.
 
 Sign in before editing. Each account begins with an empty canvas and can only load its own family tree. Wait for **Saved to cloud** before closing. Unsaved drafts survive reloads in the same tab; export a family file for a portable backup. Older browser-only data is not uploaded automatically: download it from the sign-in screen, then import it into the intended account.
 

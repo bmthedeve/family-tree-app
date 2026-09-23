@@ -82,6 +82,8 @@
               <input type="date" id="dod" name="dod" />
             </label>
             <div class="form-actions">
+              <label class="checkbox-label"><input id="deceased" name="deceased" type="checkbox" /> Deceased (even if date is unknown)</label>
+              <label><span>Notes / metadata</span><textarea id="person-notes" name="notes" rows="4" maxlength="10000" placeholder="Birthplace, occupation, biography, or other details"></textarea></label>
               <button id="person-submit" type="submit" class="primary-button">Add Person</button>
               <button id="person-cancel" type="button" class="secondary-button hidden-button">Cancel Edit</button>
             </div>
@@ -139,6 +141,7 @@
             <button id="manage-relationships-button" type="button" class="secondary-button">Manage Relationships</button>
             <button id="recycle-bin-button" type="button" class="secondary-button">Recycle Bin <span id="recycle-count"></span></button>
             <button id="layout-button" type="button" class="secondary-button">Re-run Layout</button>
+            <button id="expand-generations" type="button" class="secondary-button">Expand All Generations</button>
             <button id="reset-view-button" type="button" class="secondary-button">Reset View</button>
             <button id="export-button" type="button" class="secondary-button">Export PNG</button>
             <button id="export-data-button" type="button" class="secondary-button">Export Family File</button>
@@ -153,6 +156,8 @@
           <div class="legend-list">
             <div><span class="legend-swatch male"></span> Male</div>
             <div><span class="legend-swatch female"></span> Female</div>
+            <div>† Dashed outline: deceased</div>
+            <div>− / + beside a parent: hide / show descendants</div>
             <div><span class="legend-line parent"></span> Parent</div>
             <div><span class="legend-line spouse"></span> Spouse</div>
             <div><span class="legend-line sibling"></span> Sibling</div>
@@ -202,6 +207,7 @@
         </div>
         <div id="canvas-view" class="view-panel active">
           <div id="cy"></div>
+          <div id="generation-controls" aria-label="Generation controls"></div>
           <div id="empty-canvas" class="empty-canvas">
             <h2>Your family tree starts here</h2>
             <p>Add your first person using the sidebar, or import a family file.</p>
