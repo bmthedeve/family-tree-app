@@ -1,5 +1,16 @@
 # Family Tree App Notes
 
+## Current cloud architecture (September 2026)
+
+- Supabase email/password accounts each own one private tree in `family_tree_documents`.
+- New accounts start empty; the former shared sample dataset is no longer loaded.
+- Apply `supabase/migrations/202609230001_private_family_trees.sql` using the dashboard before cloud storage can work. See `supabase/SETUP.md` for redirect URLs and shared Auth considerations.
+- Cloud saves include people, relationships, node positions, and recycle-bin entries. Revision checks prevent stale tabs overwriting newer cloud changes.
+- A tab retains unsaved drafts per account in sessionStorage. Existing legacy localStorage family data remains available for manual export/import and is never automatically uploaded.
+- Undo history is session-only; sign-out clears forms, dialogs, graph, and history.
+- The floating Undo toast respects `hidden` and only appears following deletion. Editing from the table opens the sidebar and focuses the name field.
+- The historical localStorage/sample-data notes below describe the earlier version and are superseded by this section.
+
 This file tracks the implemented features and major changes made to the family tree application so it can be reused in a new chat if needed.
 
 ## Project Overview

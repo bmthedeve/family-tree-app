@@ -1,6 +1,6 @@
 # Family Graph
 
-A lightweight, browser-based family relationship explorer. Build and edit a family network, view it as an interactive graph or table, and save it locally or export it for later use.
+A browser-based family relationship explorer with email/password sign-in and a private cloud-saved family tree for each user. Build and edit a family network, view it as a graph or table, and export it for backup.
 
 ## Live app
 
@@ -8,6 +8,9 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 
 ## Features
 
+- Supabase email/password sign-in and account creation
+- Empty starting canvas and private cloud storage for each account
+- Save status, retry, draft recovery, and protection against stale-tab overwrites
 - Add, edit, and delete family members
 - Search for a person by name and jump directly to their highlighted graph node
 - Record, edit, and delete parent, child, spouse, and sibling relationships
@@ -20,13 +23,15 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Collapse the sidebar for a full-width canvas and restore it when needed
 - Export the graph as a PNG image
 - Export and import an editable `.familygraph.json` file
-- Preserve family data, node positions, sidebar width, and sidebar visibility in browser storage
+- Save family data, node positions, and recycle bin to Supabase; remember sidebar preferences in the browser
 - Undo and redo up to 50 data changes with keyboard shortcuts
 - Review relationship impact before deleting a person
 - Restore deleted people and their surviving connections from the Recycle Bin
 - Open a distraction-free canvas in a separate tab
 
 ## Run locally
+
+First complete the [one-time Supabase setup](supabase/SETUP.md), including the database migration and email redirect allowlist. The public project URL/key are in `supabase-config.js`; no secret keys belong in this app.
 
 No build or package installation is required. Clone the repository and serve the directory with any static HTTP server:
 
@@ -38,7 +43,7 @@ python3 -m http.server 8000
 
 Then open [http://localhost:8000](http://localhost:8000) in a browser.
 
-The Cytoscape.js library and Manrope font are loaded from public CDNs, so an internet connection is needed when the app first loads those assets.
+The Supabase client, Cytoscape.js library, and Manrope font load from public CDNs. An internet connection is needed to sign in, load cloud data, and save changes.
 
 ## Using the app
 
@@ -53,7 +58,7 @@ The Cytoscape.js library and Manrope font are loaded from public CDNs, so an int
 
 Use the on-screen controls or <kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> to undo and <kbd>Ctrl/Cmd</kbd> + <kbd>Y</kbd> (or <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>) to redo. Deleted people remain available in the Recycle Bin until they are permanently removed.
 
-Family data is automatically saved to the browser's `localStorage`. Clearing site data will remove that saved copy, so export a family file for a portable backup.
+Sign in before editing. Each account begins with an empty canvas and can only load its own family tree. Wait for **Saved to cloud** before closing. Unsaved drafts survive reloads in the same tab; export a family file for a portable backup. Older browser-only data is not uploaded automatically: download it from the sign-in screen, then import it into the intended account.
 
 ## Relationship model
 
@@ -75,6 +80,10 @@ Parent relationships are stored as `parent -> child`. A relationship entered as 
 ├── index.html        # Application markup
 ├── style.css         # Layout and visual styling
 ├── script.js         # State, graph rendering, and interactions
+├── cloud-store.js    # Account-scoped cloud persistence and write conflicts
+├── supabase-config.js # Public project URL and publishable key
+├── supabase/         # Database migration and setup instructions
+├── tests/            # Cloud-store unit tests and mocked browser smoke test
 └── PROJECT_NOTES.md  # Implementation notes and feature history
 ```
 
@@ -84,6 +93,7 @@ Parent relationships are stored as `parent -> child`. A relationship entered as 
 - CSS3
 - Vanilla JavaScript
 - [Cytoscape.js](https://js.cytoscape.org/)
+- Supabase Auth and Postgres with Row Level Security
 
 ## License
 

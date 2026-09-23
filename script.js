@@ -1,47 +1,10 @@
 const STORAGE_KEY = "family-tree-app-data-v1";
 const SIDEBAR_WIDTH_KEY = "family-tree-sidebar-width-v1";
 const SIDEBAR_COLLAPSED_KEY = "family-tree-sidebar-collapsed-v1";
-const RECYCLE_BIN_KEY = "family-tree-recycle-bin-v1";
 const HISTORY_LIMIT = 50;
 
-const sampleData = {
-  people: [
-    { id: "p1", name: "Arun", gender: "male", dateOfBirth: "1956-05-12" },
-    { id: "p2", name: "Meera", gender: "female", dateOfBirth: "1958-11-04" },
-    { id: "p3", name: "Bala", gender: "male", dateOfBirth: "1982-03-18" },
-    { id: "p4", name: "Latha", gender: "female", dateOfBirth: "1986-07-23" },
-    { id: "p5", name: "Sanjay", gender: "male", dateOfBirth: "1960-09-14" },
-    { id: "p6", name: "Kala", gender: "female", dateOfBirth: "1962-02-01" },
-    { id: "p7", name: "Divya", gender: "female", dateOfBirth: "1985-01-11" },
-    { id: "p8", name: "Nikhil", gender: "male", dateOfBirth: "1988-04-29" },
-    { id: "p9", name: "Isha", gender: "female", dateOfBirth: "2010-06-15" },
-    { id: "p10", name: "Rohan", gender: "male", dateOfBirth: "2012-09-03" }
-  ],
-  relationships: [
-    { from: "p1", to: "p3", type: "parent" },
-    { from: "p2", to: "p3", type: "parent" },
-    { from: "p1", to: "p4", type: "parent" },
-    { from: "p2", to: "p4", type: "parent" },
-    { from: "p5", to: "p7", type: "parent" },
-    { from: "p6", to: "p7", type: "parent" },
-    { from: "p5", to: "p8", type: "parent" },
-    { from: "p6", to: "p8", type: "parent" },
-    { from: "p3", to: "p4", type: "sibling" },
-    { from: "p4", to: "p3", type: "sibling" },
-    { from: "p7", to: "p8", type: "sibling" },
-    { from: "p8", to: "p7", type: "sibling" },
-    { from: "p3", to: "p7", type: "spouse" },
-    { from: "p7", to: "p3", type: "spouse" },
-    { from: "p4", to: "p8", type: "spouse" },
-    { from: "p8", to: "p4", type: "spouse" },
-    { from: "p3", to: "p9", type: "parent" },
-    { from: "p7", to: "p9", type: "parent" },
-    { from: "p4", to: "p10", type: "parent" },
-    { from: "p8", to: "p10", type: "parent" }
-  ]
-};
-
-const state = loadState();
+// Never load the old shared browser tree into a signed-in account automatically.
+const state = { people: [], relationships: [] };
 const isCanvasOnlyMode = new URLSearchParams(window.location.search).get("view") === "canvas";
 
 const refs = {
@@ -115,15 +78,21 @@ let cy;
 let backgroundTapTimer = null;
 let editingPersonId = null;
 let multiDragState = null;
-let recycleBin = loadRecycleBin();
+let recycleBin = [];
 let undoStack = [];
 let redoStack = [];
 let pendingDeletePersonId = null;
 let pendingDeleteRelationshipKey = null;
 let relationshipFilterPersonId = null;
 let toastTimer = null;
+let cloudStore = null;
+let cloudApplying = true;
+let authClient = null;
+let activeUserId = null;
+let sessionGeneration = 0;
 
 initialize();
+startCloudAuth();
 
 function initialize() {
   applyMode();
@@ -144,31 +113,8 @@ function initialize() {
   runLayout(true);
 }
 
-function loadState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) {
-    return structuredClone(sampleData);
-  }
-
-  try {
-    return JSON.parse(saved);
-  } catch (error) {
-    console.warn("Falling back to sample data after JSON parse failure.", error);
-    return structuredClone(sampleData);
-  }
-}
-
-function loadRecycleBin() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(RECYCLE_BIN_KEY) || "[]");
-    return Array.isArray(saved) ? saved : [];
-  } catch (error) {
-    console.warn("Ignoring invalid recycle bin data.", error);
-    return [];
-  }
-}
-
 function normalizeState() {
+  validateFamilyData(state);
   const peopleById = new Map();
   state.people = state.people.filter((person) => {
     if (!person?.id || peopleById.has(person.id)) {
@@ -332,6 +278,7 @@ function getStyles() {
 
 function buildElements() {
   const nodes = state.people.map((person) => ({
+    position: person.position,
     data: {
       id: person.id,
       label: person.name,
@@ -443,7 +390,7 @@ function attachEvents() {
   cy.on("mousemove", "node", (event) => showTooltip(event.target, event.renderedPosition));
   cy.on("mouseout", "node", hideTooltip);
 
-  cy.on("dragfree", "node", () => saveNodePositions());
+  cy.on("dragfree", "node", () => saveState());
   cy.on("grab", "node", handleNodeGrab);
   cy.on("drag", "node", handleNodeDrag);
   cy.on("free", "node", handleNodeFree);
@@ -862,7 +809,6 @@ function saveRelationshipEdit(event) {
       renderRelationshipList();
     }
     showMessage("Relationship updated.");
-    showUndoToast("Relationship updated.");
   } catch (error) {
     showMessage(error.message, true);
   }
@@ -960,6 +906,7 @@ function centerOnNode(node) {
 }
 
 function runLayout(fitView = false, forceAutoLayout = false) {
+  if (!state.people.length) return;
   const hasSavedPositions = state.people.some((person) => person.position);
   const layoutName = forceAutoLayout ? "cose" : hasSavedPositions ? "preset" : "cose";
   const layout = cy.layout({
@@ -982,8 +929,6 @@ function runLayout(fitView = false, forceAutoLayout = false) {
     });
   }
 
-  layout.run();
-
   if (layoutName !== "preset") {
     cy.once("layoutstop", () => {
       saveState();
@@ -992,6 +937,8 @@ function runLayout(fitView = false, forceAutoLayout = false) {
       }
     });
   }
+
+  layout.run();
 
   if (fitView) {
     setTimeout(() => cy.fit(undefined, getFitPadding()), 350);
@@ -1065,6 +1012,7 @@ function importFamilyFile(event) {
 }
 
 function loadImportedState(importedData) {
+  validateFamilyData(importedData);
   recordHistory("Import family file");
   state.people = structuredClone(importedData.people);
   state.relationships = structuredClone(importedData.relationships);
@@ -1342,6 +1290,9 @@ function startEditingPerson(personId) {
     return;
   }
 
+  if (document.body.classList.contains("sidebar-collapsed")) {
+    toggleSidebar();
+  }
   editingPersonId = personId;
   document.getElementById("name").value = person.name;
   document.getElementById("gender").value = person.gender;
@@ -1350,6 +1301,7 @@ function startEditingPerson(personId) {
   refs.personSubmit.textContent = "Save Changes";
   refs.personCancel.classList.remove("hidden-button");
   refs.personForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("name").focus({ preventScroll: true });
   showMessage(`Editing ${person.name}.`);
 }
 
@@ -1458,6 +1410,7 @@ function snapshotAppState(description = "Change") {
 }
 
 function recordHistory(description) {
+  hideUndoToast();
   undoStack.push(snapshotAppState(description));
   if (undoStack.length > HISTORY_LIMIT) {
     undoStack.shift();
@@ -1536,7 +1489,6 @@ function hideUndoToast() {
 }
 
 function saveRecycleBin() {
-  localStorage.setItem(RECYCLE_BIN_KEY, JSON.stringify(recycleBin));
   updateRecycleBinCount();
 }
 
@@ -1605,7 +1557,9 @@ function handleRecycleBinAction(event) {
   saveRecycleBin();
   refreshGraphFromState();
   renderRecycleBin();
-  showUndoToast(`${entry.person.name}: action completed.`);
+  if (button.dataset.recycleAction === "purge") {
+    showUndoToast(`${entry.person.name} deleted.`);
+  }
 }
 
 function renderSearchResults(query) {
@@ -1650,6 +1604,7 @@ function jumpToPerson(personId) {
 }
 
 function handleHistoryShortcut(event) {
+  if (cloudApplying || !activeUserId || event.target.closest("input, textarea, select")) return;
   if (!(event.metaKey || event.ctrlKey) || event.altKey) {
     return;
   }
@@ -1670,7 +1625,10 @@ function showMessage(text, isError = false) {
 
 function saveState() {
   saveNodePositions();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (!cloudApplying && cloudStore) {
+    cloudStore.queue({ people: state.people, relationships: state.relationships, recycleBin });
+  }
+  document.getElementById("empty-canvas").hidden = state.people.length > 0;
 }
 
 function saveNodePositions() {
@@ -1738,4 +1696,203 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function reportSync(status, detail = "") {
+  const labels = {
+    pending: "Unsaved changes…", saving: "Saving…", saved: "Saved to cloud",
+    error: "Not saved. Check your connection and retry.",
+    conflict: "This tree changed elsewhere. Export your draft before reloading the cloud copy."
+  };
+  document.getElementById("sync-status").textContent = detail || labels[status];
+  document.getElementById("retry-save").hidden = status !== "error";
+  document.getElementById("reload-cloud").hidden = status !== "conflict";
+}
+
+async function startCloudAuth() {
+  const message = document.getElementById("auth-message");
+  try {
+    if (!window.supabase || !window.FAMILY_SUPABASE) {
+      throw new Error("Sign-in could not load. Check your internet connection and reload.");
+    }
+    authClient = window.supabase.createClient(FAMILY_SUPABASE.url, FAMILY_SUPABASE.publishableKey, {
+      auth: { storageKey: "family-graph-auth-v1", persistSession: true, autoRefreshToken: true }
+    });
+    document.getElementById("auth-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitAuth(false);
+    });
+    document.getElementById("sign-up").addEventListener("click", () => submitAuth(true));
+    document.getElementById("sign-out").addEventListener("click", signOutAccount);
+    document.getElementById("auth-sign-out").addEventListener("click", signOutAccount);
+    document.getElementById("retry-save").addEventListener("click", () => cloudStore?.flush().catch(() => {}));
+    document.getElementById("retry-load").addEventListener("click", retryAccountLoad);
+    document.getElementById("reload-cloud").addEventListener("click", async () => {
+      if (!window.confirm("Discard this tab's unsaved draft and load the latest cloud copy? Export Family File first if you want to keep your draft.")) return;
+      try { sessionStorage.removeItem(cloudStore.key); } catch { /* Retry can still load the cloud. */ }
+      await retryAccountLoad();
+    });
+    window.addEventListener("online", () => cloudStore?.flush().catch(() => {}));
+    window.addEventListener("beforeunload", (event) => {
+      if (cloudStore?.pending) { event.preventDefault(); event.returnValue = ""; }
+    });
+    const legacy = document.getElementById("legacy-backup");
+    legacy.hidden = !localStorage.getItem(STORAGE_KEY);
+    legacy.addEventListener("click", () => {
+      try {
+        const previous = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        downloadFamilyJson(previous, "previous-browser-tree.familygraph.json");
+      } catch { message.textContent = "The previous browser data could not be read."; }
+    });
+    // Do not call async Supabase methods inside its auth event callback.
+    authClient.auth.onAuthStateChange((_event, session) => {
+      setTimeout(() => applyAccountSession(session), 0);
+    });
+    const { data, error } = await authClient.auth.getSession();
+    if (error) throw error;
+    await applyAccountSession(data.session);
+  } catch (error) {
+    message.textContent = error.message;
+  }
+}
+
+async function submitAuth(createAccount) {
+  const form = document.getElementById("auth-form");
+  if (!form.reportValidity()) return;
+  const message = document.getElementById("auth-message");
+  const email = document.getElementById("auth-email").value.trim();
+  const password = document.getElementById("auth-password").value;
+  const buttons = [document.getElementById("sign-in"), document.getElementById("sign-up")];
+  buttons.forEach((button) => { button.disabled = true; });
+  message.textContent = createAccount ? "Creating account…" : "Signing in…";
+  try {
+    const redirect = new URL(window.location.href);
+    redirect.search = "";
+    redirect.hash = "";
+    const { data, error } = createAccount
+      ? await authClient.auth.signUp({ email, password, options: { emailRedirectTo: redirect.href } })
+      : await authClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    document.getElementById("auth-password").value = "";
+    if (data.session) await applyAccountSession(data.session);
+    else message.textContent = "Check your email for confirmation, then return here to sign in. If you already have an account, use Sign in.";
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+}
+
+async function retryAccountLoad() {
+  const { data, error } = await authClient.auth.getSession();
+  if (error) { document.getElementById("auth-message").textContent = error.message; return; }
+  await applyAccountSession(data.session, true);
+}
+
+async function applyAccountSession(session, force = false) {
+  const user = session?.user;
+  if (!force && user && user.id === activeUserId) return;
+  const generation = ++sessionGeneration;
+  cloudStore?.close();
+  cloudStore = null;
+  cloudApplying = true;
+  activeUserId = user?.id || null;
+  document.getElementById("workspace").hidden = true;
+  document.getElementById("auth-screen").hidden = false;
+  document.getElementById("auth-form").hidden = !!user;
+  document.getElementById("auth-retry-actions").hidden = !user;
+  document.getElementById("account-email").textContent = user?.email || "";
+  document.getElementById("auth-message").textContent = user ? "Loading your family tree…" : "Sign in or create an account. Every account starts with an empty tree.";
+  document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+  hideUndoToast();
+  hideTooltip();
+  state.people = [];
+  state.relationships = [];
+  recycleBin = [];
+  undoStack = [];
+  redoStack = [];
+  pendingDeletePersonId = null;
+  pendingDeleteRelationshipKey = null;
+  relationshipFilterPersonId = null;
+  refs.personSearch.value = "";
+  refs.message.textContent = "";
+  refs.relationshipForm.reset();
+  refs.relationshipEditorForm.reset();
+  refs.relationshipsList.textContent = "";
+  refs.recycleBinList.textContent = "";
+  refreshGraphFromState();
+  updateHistoryControls();
+  if (!user) return;
+  const store = new FamilyTreeStore(authClient, user.id, sessionStorage, (status, detail) => {
+    if (generation === sessionGeneration) reportSync(status, detail);
+  });
+  cloudStore = store;
+  try {
+    const loaded = await store.load();
+    if (generation !== sessionGeneration) return;
+    state.people = loaded.people;
+    state.relationships = loaded.relationships;
+    recycleBin = loaded.recycleBin;
+    normalizeState();
+    document.getElementById("auth-screen").hidden = true;
+    document.getElementById("workspace").hidden = false;
+    refreshGraphFromState();
+    cy.resize();
+    cloudApplying = false;
+    if (!store.conflict && store.pending) store.flush().catch(() => {});
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    document.getElementById("auth-message").textContent =
+      ["42P01", "PGRST205"].includes(error.code)
+        ? "Cloud storage needs setup. Run the family-tree SQL migration in Supabase, then retry loading."
+        : `Could not load your tree: ${error.message}. Your cloud data has not been replaced.`;
+  }
+}
+
+async function signOutAccount() {
+  try {
+    await cloudStore?.flush();
+    // Only revoke this app's session, not the other app's sessions in this project.
+    const { error } = await authClient.auth.signOut({ scope: "local" });
+    if (error) throw error;
+    await applyAccountSession(null);
+    document.getElementById("auth-password").value = "";
+  } catch (error) {
+    reportSync("error", `Sign out paused: ${error.message}`);
+    document.getElementById("auth-message").textContent = error.message;
+  }
+}
+
+function downloadFamilyJson(data, filename) {
+  const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), data }, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function validateFamilyData(data) {
+  if (!data || !Array.isArray(data.people) || !Array.isArray(data.relationships)) {
+    throw new Error("Invalid family file: people and relationships must be lists.");
+  }
+  const ids = new Set();
+  for (const person of data.people) {
+    if (!person || typeof person.id !== "string" || !person.id || ids.has(person.id)
+      || typeof person.name !== "string" || !person.name.trim()
+      || !["male", "female"].includes(person.gender)) {
+      throw new Error("Invalid person: provide a unique ID, name, and supported gender.");
+    }
+    ids.add(person.id);
+    if (person.position && (!Number.isFinite(person.position.x) || !Number.isFinite(person.position.y))) {
+      throw new Error("Invalid saved node position.");
+    }
+  }
+  for (const relationship of data.relationships) {
+    if (!relationship || typeof relationship.from !== "string" || typeof relationship.to !== "string"
+      || !["parent", "child", "spouse", "sibling"].includes(relationship.type)) {
+      throw new Error("Invalid relationship in family file.");
+    }
+  }
 }

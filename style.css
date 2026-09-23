@@ -19,6 +19,41 @@
   box-sizing: border-box;
 }
 
+[hidden] { display: none !important; }
+
+.auth-screen {
+  height: 100dvh;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.auth-card { width: min(100%, 460px); padding: 32px; }
+.auth-card p { line-height: 1.6; }
+#auth-message { overflow-wrap: anywhere; }
+.account-bar {
+  min-height: 60px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+}
+#account-email { overflow-wrap: anywhere; }
+#sync-status { flex: 1; font-size: 0.85rem; color: var(--muted); }
+.account-bar button { padding: 7px 12px; }
+#workspace { height: 100dvh; display: flex; flex-direction: column; }
+#workspace .app-shell { flex: 1; min-height: 0; height: auto; }
+#workspace .panel, #workspace .canvas-wrap { height: 100%; }
+#canvas-view { position: relative; }
+.empty-canvas {
+  position: absolute;
+  inset: 35% 24px auto;
+  text-align: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+
 html,
 body {
   height: 100%;
@@ -635,6 +670,10 @@ body.canvas-only-mode .expand-button {
   box-shadow: 0 14px 38px rgba(0, 0, 0, 0.28);
 }
 
+.undo-toast[hidden] {
+  display: none;
+}
+
 .undo-toast button {
   padding: 8px 12px;
   background: #ffdb6e;
@@ -643,6 +682,10 @@ body.canvas-only-mode .expand-button {
 }
 
 @media (max-width: 980px) {
+  #workspace { overflow: auto; }
+  #workspace .app-shell { flex: none; min-height: 0; }
+  #workspace .panel { width: 100%; max-width: none; height: auto; max-height: 65dvh; }
+  #workspace .canvas-wrap { height: 75dvh; }
   .app-shell {
     grid-template-columns: 1fr;
     height: auto;

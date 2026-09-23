@@ -13,6 +13,33 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <section id="auth-screen" class="auth-screen">
+      <div class="card auth-card">
+        <p class="eyebrow">Family Graph</p>
+        <h1>Your family, your story</h1>
+        <p>Sign in to create your private family tree and save it across devices.</p>
+        <form id="auth-form" class="form-grid">
+          <label><span>Email</span><input id="auth-email" type="email" autocomplete="username" required /></label>
+          <label><span>Password</span><input id="auth-password" type="password" autocomplete="current-password" required /></label>
+          <button id="sign-in" type="submit" class="primary-button">Sign in</button>
+          <button id="sign-up" type="button" class="secondary-button">Create account</button>
+        </form>
+        <p id="auth-message" role="status" aria-live="polite">Connecting…</p>
+        <div id="auth-retry-actions" hidden>
+          <button id="retry-load" type="button" class="secondary-button">Retry loading tree</button>
+          <button id="auth-sign-out" type="button" class="secondary-button">Sign out</button>
+        </div>
+        <button id="legacy-backup" type="button" class="secondary-button" hidden>Download previous browser tree</button>
+      </div>
+    </section>
+    <div id="workspace" hidden>
+    <div class="account-bar">
+      <span id="account-email"></span>
+      <span id="sync-status" role="status" aria-live="polite"></span>
+      <button id="retry-save" type="button" class="secondary-button" hidden>Retry save</button>
+      <button id="reload-cloud" type="button" class="secondary-button" hidden>Reload cloud copy</button>
+      <button id="sign-out" type="button" class="secondary-button">Sign out</button>
+    </div>
     <div class="app-shell">
       <aside id="sidebar" class="panel">
         <div class="panel-header">
@@ -175,6 +202,10 @@
         </div>
         <div id="canvas-view" class="view-panel active">
           <div id="cy"></div>
+          <div id="empty-canvas" class="empty-canvas">
+            <h2>Your family tree starts here</h2>
+            <p>Add your first person using the sidebar, or import a family file.</p>
+          </div>
         </div>
         <div id="table-view" class="view-panel hidden">
           <div class="table-wrap">
@@ -205,6 +236,7 @@
         aria-orientation="vertical"
         aria-label="Resize sidebar"
       ></div>
+    </div>
     </div>
 
     <dialog id="delete-person-dialog" class="app-dialog">
@@ -296,6 +328,9 @@
     </div>
 
     <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
+    <script src="supabase-config.js"></script>
+    <script src="cloud-store.js"></script>
     <script src="script.js"></script>
   </body>
 </html>
