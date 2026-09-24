@@ -19,6 +19,8 @@ const refs = {
   newSpouseDetails: document.getElementById("new-spouse-details"),
   personSearch: document.getElementById("person-search"),
   searchResults: document.getElementById("search-results"),
+  searchPanel: document.getElementById("person-search-panel"),
+  findPersonButton: document.getElementById("find-person-button"),
   message: document.getElementById("message"),
   stats: document.getElementById("stats"),
   tooltip: document.getElementById("tooltip"),
@@ -229,7 +231,7 @@ function getStyles() {
         "overlay-opacity": 0
       }
     },
-    { selector: "node[deceased = 1]", style: { "border-style": "dashed", "border-width": 4, "border-color": "#231d14" } },
+    { selector: "node[deceased = 1]", style: { "border-style": "dashed", "border-width": 1, "border-color": "#746c60" } },
     {
       selector: "edge",
       style: {
@@ -323,7 +325,7 @@ function edgeData(relationship) {
 function personNodeData(person) {
   const deceased = !!(person.deceased || person.dateOfDeath);
   return {
-    label: `${person.name}${deceased ? " †" : ""}`,
+    label: person.name,
     shape: person.gender === "male" ? "round-rectangle" : "ellipse",
     deceased: deceased ? 1 : 0
   };
@@ -408,6 +410,13 @@ function relationshipColor(type) {
 }
 
 function attachEvents() {
+  attachContainedBoxSelection();
+  refs.findPersonButton.addEventListener("click", openPersonSearch);
+  document.addEventListener("pointerdown", event => {
+    if (isCanvasOnlyMode && !refs.searchPanel.contains(event.target) && !refs.findPersonButton.contains(event.target)) {
+      closeFloatingSearch();
+    }
+  });
   document.getElementById("selection-mode").addEventListener("click", () => setCanvasTool("select"));
   document.getElementById("pan-mode").addEventListener("click", () => setCanvasTool("pan"));
   cy.on("select unselect", "node", () => {
@@ -1149,7 +1158,7 @@ function showTooltip(node, renderedPosition) {
 
   refs.tooltip.innerHTML = `
     <strong>${escapeHtml(person.name)}</strong>
-    <div>${escapeHtml(capitalize(person.gender))}${person.deceased || person.dateOfDeath ? " · Deceased †" : ""}</div>
+    <div>${escapeHtml(capitalize(person.gender))}${person.deceased || person.dateOfDeath ? " · Deceased" : ""}</div>
     <div>DOB: ${formatDate(person.dateOfBirth)}</div>
     <div>DOD: ${person.dateOfDeath ? formatDate(person.dateOfDeath) : "N/A"}</div>
     ${person.notes ? `<div>${escapeHtml(person.notes)}</div>` : ""}
@@ -1260,6 +1269,11 @@ function applyMode() {
   }
 
   document.body.classList.add("canvas-only-mode");
+  // Reuse the same search UI in the full-canvas tab, where there is no sidebar.
+  document.querySelector(".canvas-header").append(refs.searchPanel);
+  refs.searchPanel.classList.add("floating-search");
+  refs.searchPanel.hidden = true;
+  refs.findPersonButton.setAttribute("aria-expanded", "false");
 }
 
 function openCanvasOnlyView() {
@@ -1293,7 +1307,59 @@ function updateSidebarToggle(isCollapsed) {
   const action = isCollapsed ? "Show" : "Hide";
   refs.sidebarToggleButton.setAttribute("aria-expanded", String(!isCollapsed));
   refs.sidebarToggleButton.setAttribute("aria-label", `${action} sidebar`);
-  refs.sidebarToggleButton.title = `${action} sidebar`;
+  refs.sidebarToggleButton.title = `${action} sidebar (Cmd/Ctrl + \\)`;
+}
+
+function openPersonSearch() {
+  if (isCanvasOnlyMode) {
+    if (!refs.searchPanel.hidden) {
+      closeFloatingSearch();
+      return;
+    }
+    refs.searchPanel.hidden = false;
+    refs.findPersonButton.setAttribute("aria-expanded", "true");
+  } else if (document.body.classList.contains("sidebar-collapsed")) {
+    toggleSidebar();
+  }
+  refs.personSearch.focus();
+  refs.personSearch.select();
+}
+
+function closeFloatingSearch() {
+  if (!isCanvasOnlyMode) return;
+  refs.searchPanel.hidden = true;
+  refs.findPersonButton.setAttribute("aria-expanded", "false");
+}
+
+function attachContainedBoxSelection() {
+  let gesture = null;
+  cy.on("tapstart", event => {
+    // Capture icon bounds before selection styling changes the border/size.
+    gesture = {
+      start: { ...event.position },
+      selected: new Set(cy.elements(":selected").map(element => element.id())),
+      icons: cy.nodes(":visible").map(node => {
+        const { x, y } = node.position();
+        return { id: node.id(), x1: x - node.outerWidth() / 2, x2: x + node.outerWidth() / 2,
+          y1: y - node.outerHeight() / 2, y2: y + node.outerHeight() / 2 };
+      })
+    };
+  });
+  cy.on("boxend", event => {
+    if (!gesture || event.originalEvent?.type.startsWith("touch")) return;
+    const { start, selected, icons } = gesture;
+    gesture = null;
+    const end = event.position;
+    const x1 = Math.min(start.x, end.x), x2 = Math.max(start.x, end.x);
+    const y1 = Math.min(start.y, end.y), y2 = Math.max(start.y, end.y);
+    const enclosed = new Set(icons.filter(icon => icon.x1 >= x1 && icon.x2 <= x2 && icon.y1 >= y1 && icon.y2 <= y2).map(icon => icon.id));
+    // Cytoscape 3.29 emits boxend before its intersection-based selection.
+    // Correct that result afterwards, retaining the existing additive selection.
+    queueMicrotask(() => cy.batch(() => {
+      cy.elements(":selected").filter(element => !selected.has(element.id()) && !enclosed.has(element.id())).unselect();
+      cy.nodes(":visible").filter(node => enclosed.has(node.id())).select();
+    }));
+  });
 }
 
 function handleWindowResize() {
@@ -1659,14 +1725,25 @@ function jumpToPerson(personId) {
   }, 70);
   refs.personSearch.value = nameForId(personId);
   refs.searchResults.innerHTML = "";
+  closeFloatingSearch();
   showMessage(`Centered on ${nameForId(personId)}.`);
 }
 
 function handleHistoryShortcut(event) {
-  if (cloudApplying || !activeUserId || event.target.closest("input, textarea, select")) return;
+  if (event.key === "Escape" && isCanvasOnlyMode && !refs.searchPanel.hidden) {
+    closeFloatingSearch();
+    refs.findPersonButton.focus();
+  }
+  if (cloudApplying || !activeUserId || document.querySelector("dialog[open]")) return;
   if (!(event.metaKey || event.ctrlKey) || event.altKey) {
     return;
   }
+  if ((event.code === "Backslash" || event.key === "\\") && !event.shiftKey && !isCanvasOnlyMode) {
+    event.preventDefault();
+    if (!event.repeat) toggleSidebar();
+    return;
+  }
+  if (event.target.closest("input, textarea, select, [contenteditable]")) return;
   const key = event.key.toLocaleLowerCase();
   if (key === "z" && !event.shiftKey) {
     event.preventDefault();

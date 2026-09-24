@@ -33,6 +33,7 @@
 #auth-message { overflow-wrap: anywhere; }
 .account-bar {
   min-height: 60px;
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -92,6 +93,9 @@ body {
 }
 
 .panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   width: var(--sidebar-width, clamp(240px, 22vw, 340px));
   min-width: 220px;
   max-width: 460px;
@@ -99,9 +103,35 @@ body {
   background: var(--panel);
   backdrop-filter: blur(14px);
   padding: 24px;
-  overflow-y: auto;
-  overflow-x: auto;
+  overflow: hidden;
   resize: none;
+}
+
+.sidebar-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.search-card {
+  flex-shrink: 0;
+}
+
+.search-toggle svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.floating-search {
+  position: absolute;
+  top: 70px;
+  left: 18px;
+  z-index: 20;
+  width: min(320px, calc(100% - 36px));
+  background: #fffcf5;
+  box-shadow: var(--shadow);
 }
 
 .canvas-wrap {

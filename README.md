@@ -15,7 +15,7 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Add, edit, and delete family members
 - Place new members in free space beside existing members without overlapping them
 - Distinguish male members with blue rounded squares and female members with pink circles
-- Mark deceased members with a † and dashed outline, even when their death date is unknown
+- Mark deceased members with a subtle, thin dashed outline, even when their death date is unknown
 - Keep editable notes/metadata for each member
 - Collapse or expand a parent's descendants using its −/+ button; expand every branch from the sidebar
 - Search for a person by name and jump directly to their highlighted graph node
@@ -55,14 +55,14 @@ The Supabase client, Cytoscape.js library, and Manrope font load from public CDN
 
 The account bar contains a **Family tree** picker, **New Tree**, and **Rename**. Existing trees are preserved as **My Family Tree** after applying the [named-tree migration](supabase/migrations/202609240001_named_family_trees.sql). Each tree has its own people, relationships, recycle bin, recovery draft, and save revision. Switching waits for pending saves and clears the previous tree's undo history. Family-file exports use the tree's name; imports replace only the currently selected tree.
 
-**Select** is the default canvas tool: drag on empty canvas to box-select members, then drag any selected member to move the group while keeping its arrangement. Use **Pan** to drag the background instead. <kbd>Shift</kbd> + drag selects a group in either mode. Only visible members can be selected. Member positions are saved when you release the group.
+**Select** is the default canvas tool: drag on empty canvas to box-select members, then drag any selected member to move the group while keeping its arrangement. An icon must be completely enclosed by the rectangle; partial overlaps and labels do not count. Use **Pan** to drag the background instead. <kbd>Shift</kbd> + drag selects a group in either mode. Only visible members can be selected. Member positions are saved when you release the group.
 
 1. Add people from the sidebar.
-2. Use **Find Person** to search by name, then select a result to center and highlight that person.
+2. **Find Person** stays pinned at the top of the sidebar while its other controls scroll. The magnifying-glass button beside Select/Pan opens and focuses search, even with the sidebar closed; it opens a search popover in the separate canvas-only tab. Choose a result to center and highlight that person.
 3. Choose two people and define their relationship. Spouse relationships can include status and dates.
 4. Select a graph edge or use **Manage Relationships** to edit or delete a connection.
 5. Drag nodes to organize the graph, scroll to zoom, or drag the background to pan.
-6. Use the sidebar button in the canvas header to toggle between editing controls and a full-width canvas.
+6. Use the sidebar button or <kbd>Cmd/Ctrl</kbd> + <kbd>\\</kbd> to toggle between editing controls and a full-width canvas. The shortcut also works while typing in a form, but not while a dialog is open.
 7. Use **Re-run Layout** to automatically arrange the family network.
 8. Use **Export Family File** to create an editable backup that can later be restored with **Import Family File**.
 

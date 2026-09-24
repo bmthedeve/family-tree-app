@@ -45,15 +45,7 @@
     </div>
     <div class="app-shell">
       <aside id="sidebar" class="panel">
-        <div class="panel-header">
-          <p class="eyebrow">Family Graph</p>
-          <h1>Relationship Explorer</h1>
-          <p class="panel-copy">
-            Build a real-world family network with parents, spouses, and siblings.
-          </p>
-        </div>
-
-        <section class="card search-card">
+        <section id="person-search-panel" class="card search-card">
           <h2>Find Person</h2>
           <label>
             <span>Search by name</span>
@@ -61,6 +53,15 @@
           </label>
           <div id="search-results" class="search-results" role="listbox" aria-label="Matching people"></div>
         </section>
+
+        <div class="sidebar-content">
+        <div class="panel-header">
+          <p class="eyebrow">Family Graph</p>
+          <h1>Relationship Explorer</h1>
+          <p class="panel-copy">
+            Build a real-world family network with parents, spouses, and siblings.
+          </p>
+        </div>
 
         <section class="card">
           <h2>Add Person</h2>
@@ -159,7 +160,7 @@
           <div class="legend-list">
             <div><span class="legend-swatch male"></span> Male</div>
             <div><span class="legend-swatch female"></span> Female</div>
-            <div>† Dashed outline: deceased</div>
+            <div>Thin dashed outline: deceased</div>
             <div>− / + beside a parent: hide / show descendants</div>
             <div><span class="legend-line parent"></span> Parent</div>
             <div><span class="legend-line spouse"></span> Spouse</div>
@@ -168,6 +169,7 @@
         </section>
 
         <div id="message" class="message" aria-live="polite"></div>
+        </div>
       </aside>
 
       <main class="canvas-wrap">
@@ -179,6 +181,9 @@
           <div class="canvas-tools">
             <button id="selection-mode" type="button" class="secondary-button" aria-pressed="true">Select</button>
             <button id="pan-mode" type="button" class="secondary-button" aria-pressed="false">Pan</button>
+            <button id="find-person-button" type="button" class="secondary-button search-toggle" aria-label="Find Person" aria-controls="person-search-panel" title="Find Person">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
+            </button>
             <span id="selection-count" role="status" aria-live="polite">0 selected</span>
             <button
               id="sidebar-toggle-button"
@@ -187,6 +192,7 @@
               aria-label="Hide sidebar"
               aria-controls="sidebar"
               aria-expanded="true"
+              aria-keyshortcuts="Meta+\ Control+\"
               title="Hide sidebar"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -207,7 +213,7 @@
               <button id="table-tab" type="button" class="view-tab" aria-selected="false">Table</button>
             </div>
             <p class="canvas-help">
-              Select: drag a box around members, then drag any selected member to move the group. Use Pan to move the canvas; Shift-drag selects in either mode. Scroll to zoom.
+              Select: fully enclose member icons in a box, then drag any selected member to move the group. Use Pan to move the canvas; Shift-drag selects in either mode. Scroll to zoom.
             </p>
           </div>
         </div>

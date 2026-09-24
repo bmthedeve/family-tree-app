@@ -3,13 +3,15 @@
 ## Current cloud architecture (September 2026)
 
 - New nodes get collision-free positions near visible members; existing positions remain unchanged.
-- Gender is shown with both shape and color. A deceased flag or death date adds a † and dashed border.
+- Gender is shown with both shape and color. A deceased flag or death date adds a subtle 1px dashed border, without a symbol beside the name.
+- Cmd/Ctrl + Backslash toggles the sidebar, including from form fields (except while a dialog is open). Search stays above the independently scrolling sidebar controls; the toolbar lens reveals/focuses it, or opens a popover in canvas-only mode.
 - Person records support optional `notes`, `deceased`, and `descendantsCollapsed` fields in the existing JSON cloud document; no database migration is needed.
 - Per-parent −/+ canvas buttons hide descendants via parent links, preserving nested collapse preferences. Search reveals hidden results; Expand All Generations clears all branch folds.
 
 - Supabase email/password accounts can own multiple private named rows in `family_tree_documents`. The tree UUID is the primary key; `owner_id` remains the RLS ownership field.
 - Apply `202609240001_named_family_trees.sql` after the initial migration to preserve existing documents as **My Family Tree** and enable the tree picker, creation, and renaming.
 - Select/Pan canvas tools expose area selection without requiring Shift. Native Cytoscape group dragging moves selected members exactly once (the previous custom follower movement has been removed).
+- Box selection requires fully enclosed visible icon bounds, excluding labels. A post-boxend correction handles Cytoscape 3.29.2's intersection selection while preserving prior additive selection; mouse selection works in both directions and at any zoom/pan.
 - New accounts start empty; the former shared sample dataset is no longer loaded.
 - Apply `supabase/migrations/202609230001_private_family_trees.sql` using the dashboard before cloud storage can work. See `supabase/SETUP.md` for redirect URLs and shared Auth considerations.
 - Cloud saves include people, relationships, node positions, and recycle-bin entries. Revision checks prevent stale tabs overwriting newer cloud changes.
