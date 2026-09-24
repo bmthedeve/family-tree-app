@@ -77,7 +77,6 @@ const refs = {
 let cy;
 let backgroundTapTimer = null;
 let editingPersonId = null;
-let multiDragState = null;
 let recycleBin = [];
 let undoStack = [];
 let redoStack = [];
@@ -90,6 +89,11 @@ let cloudApplying = true;
 let authClient = null;
 let activeUserId = null;
 let sessionGeneration = 0;
+let activeTreeId = null;
+let treeCatalog = null;
+let treeList = [];
+let treeDialogMode = "create";
+let treeChanging = false;
 
 initialize();
 startCloudAuth();
@@ -193,7 +197,7 @@ function setupCy() {
     zoomingEnabled: true,
     userZoomingEnabled: true,
     panningEnabled: true,
-    userPanningEnabled: true,
+    userPanningEnabled: false,
     boxSelectionEnabled: true,
     selectionType: "additive",
     autoungrabify: false,
@@ -364,6 +368,7 @@ function applyGenerationVisibility() {
   cy.batch(() => {
     cy.nodes().forEach(node => node.toggleClass("generation-hidden", hidden.has(node.id())));
     cy.edges().forEach(edge => edge.toggleClass("generation-hidden", hidden.has(edge.source().id()) || hidden.has(edge.target().id())));
+    cy.nodes(".generation-hidden").unselect();
   });
   renderGenerationControls();
 }
@@ -403,6 +408,12 @@ function relationshipColor(type) {
 }
 
 function attachEvents() {
+  document.getElementById("selection-mode").addEventListener("click", () => setCanvasTool("select"));
+  document.getElementById("pan-mode").addEventListener("click", () => setCanvasTool("pan"));
+  cy.on("select unselect", "node", () => {
+    document.getElementById("selection-count").textContent = `${cy.nodes(":selected").length} selected`;
+  });
+  setCanvasTool("select");
   document.getElementById("expand-generations").addEventListener("click", () => {
     state.people.forEach(person => { person.descendantsCollapsed = false; });
     saveState();
@@ -482,9 +493,6 @@ function attachEvents() {
   cy.on("mouseout", "node", hideTooltip);
 
   cy.on("dragfree", "node", () => saveState());
-  cy.on("grab", "node", handleNodeGrab);
-  cy.on("drag", "node", handleNodeDrag);
-  cy.on("free", "node", handleNodeFree);
   window.addEventListener("resize", handleWindowResize);
   window.addEventListener("keydown", handleHistoryShortcut);
 }
@@ -1058,6 +1066,7 @@ function exportFamilyFile() {
 
   const exportPayload = {
     version: 1,
+    name: treeList.find(tree => tree.id === activeTreeId)?.name || "Family Tree",
     exportedAt: new Date().toISOString(),
     data: {
       people: state.people,
@@ -1071,7 +1080,7 @@ function exportFamilyFile() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "family-graph.familygraph.json";
+  link.download = `${exportPayload.name.replace(/[^\p{L}\p{N} _-]/gu, "_")}.familygraph.json`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1296,67 +1305,12 @@ function handleWindowResize() {
   cy.fit(undefined, getFitPadding());
 }
 
-function handleNodeGrab(event) {
-  const grabbedNode = event.target;
-
-  if (!grabbedNode.selected()) {
-    cy.nodes(":selected").unselect();
-    grabbedNode.select();
-  }
-
-  const selectedNodes = cy.nodes(":selected");
-  if (selectedNodes.length <= 1) {
-    multiDragState = null;
-    return;
-  }
-
-  multiDragState = {
-    leadId: grabbedNode.id(),
-    lastPosition: { ...grabbedNode.position() },
-    followerIds: selectedNodes
-      .not(grabbedNode)
-      .map((node) => node.id())
-  };
-}
-
-function handleNodeDrag(event) {
-  if (!multiDragState || event.target.id() !== multiDragState.leadId) {
-    return;
-  }
-
-  const currentPosition = event.target.position();
-  const dx = currentPosition.x - multiDragState.lastPosition.x;
-  const dy = currentPosition.y - multiDragState.lastPosition.y;
-
-  if (dx === 0 && dy === 0) {
-    return;
-  }
-
-  cy.batch(() => {
-    multiDragState.followerIds.forEach((nodeId) => {
-      const node = cy.getElementById(nodeId);
-      if (!node.nonempty()) {
-        return;
-      }
-
-      const position = node.position();
-      node.position({
-        x: position.x + dx,
-        y: position.y + dy
-      });
-    });
-  });
-
-  multiDragState.lastPosition = { ...currentPosition };
-}
-
-function handleNodeFree() {
-  if (!multiDragState) {
-    return;
-  }
-
-  multiDragState = null;
-  saveState();
+function setCanvasTool(tool) {
+  const selecting = tool === "select";
+  cy.userPanningEnabled(!selecting);
+  document.getElementById("selection-mode").setAttribute("aria-pressed", String(selecting));
+  document.getElementById("pan-mode").setAttribute("aria-pressed", String(!selecting));
+  refs.canvasView.classList.toggle("select-mode", selecting);
 }
 
 function handleTableActions(event) {
@@ -1831,6 +1785,11 @@ async function startCloudAuth() {
     document.getElementById("sign-up").addEventListener("click", () => submitAuth(true));
     document.getElementById("sign-out").addEventListener("click", signOutAccount);
     document.getElementById("auth-sign-out").addEventListener("click", signOutAccount);
+    document.getElementById("tree-select").addEventListener("change", event => changeTree(event.target.value));
+    document.getElementById("new-tree").addEventListener("click", () => openTreeDialog("create"));
+    document.getElementById("rename-tree").addEventListener("click", () => openTreeDialog("rename"));
+    document.getElementById("cancel-tree").addEventListener("click", () => document.getElementById("tree-dialog").close());
+    document.getElementById("tree-form").addEventListener("submit", submitTreeForm);
     document.getElementById("retry-save").addEventListener("click", () => cloudStore?.flush().catch(() => {}));
     document.getElementById("retry-load").addEventListener("click", retryAccountLoad);
     document.getElementById("reload-cloud").addEventListener("click", async () => {
@@ -1895,7 +1854,7 @@ async function retryAccountLoad() {
   await applyAccountSession(data.session, true);
 }
 
-async function applyAccountSession(session, force = false) {
+async function applyAccountSession(session, force = false, requestedTreeId = null) {
   const user = session?.user;
   if (!force && user && user.id === activeUserId) return;
   const generation = ++sessionGeneration;
@@ -1903,6 +1862,10 @@ async function applyAccountSession(session, force = false) {
   cloudStore = null;
   cloudApplying = true;
   activeUserId = user?.id || null;
+  activeTreeId = null;
+  treeCatalog = null;
+  treeList = [];
+  document.getElementById("tree-select").replaceChildren();
   document.getElementById("workspace").hidden = true;
   document.getElementById("auth-screen").hidden = false;
   document.getElementById("auth-form").hidden = !!user;
@@ -1921,6 +1884,7 @@ async function applyAccountSession(session, force = false) {
   pendingDeleteRelationshipKey = null;
   relationshipFilterPersonId = null;
   refs.personSearch.value = "";
+  document.getElementById("selection-count").textContent = "0 selected";
   refs.message.textContent = "";
   refs.relationshipForm.reset();
   refs.relationshipEditorForm.reset();
@@ -1929,11 +1893,28 @@ async function applyAccountSession(session, force = false) {
   refreshGraphFromState();
   updateHistoryControls();
   if (!user) return;
-  const store = new FamilyTreeStore(authClient, user.id, sessionStorage, (status, detail) => {
-    if (generation === sessionGeneration) reportSync(status, detail);
-  });
-  cloudStore = store;
   try {
+    const catalog = new FamilyTreeCatalog(authClient, user.id);
+    let trees = await catalog.list();
+    if (generation !== sessionGeneration) return;
+    if (!trees.length) {
+      try { await catalog.create("My Family Tree", user.id); }
+      catch (error) { if (error.code !== "23505") throw error; }
+      trees = await catalog.list();
+    }
+    if (generation !== sessionGeneration) return;
+    let remembered = null;
+    try { remembered = localStorage.getItem(`family-tree-active:${user.id}`); } catch { /* Optional UI preference. */ }
+    const selected = trees.find(tree => tree.id === (requestedTreeId || remembered)) || trees[0];
+    if (!selected) throw new Error("Could not find a family tree. Retry loading.");
+    treeCatalog = catalog;
+    treeList = trees;
+    activeTreeId = selected.id;
+    renderTreePicker();
+    const store = new FamilyTreeStore(authClient, user.id, sessionStorage, (status, detail) => {
+      if (generation === sessionGeneration) reportSync(status, detail);
+    }, selected.id, selected.name);
+    cloudStore = store;
     const loaded = await store.load();
     if (generation !== sessionGeneration) return;
     state.people = loaded.people;
@@ -1945,13 +1926,92 @@ async function applyAccountSession(session, force = false) {
     refreshGraphFromState();
     cy.resize();
     cloudApplying = false;
+    try { localStorage.setItem(`family-tree-active:${user.id}`, selected.id); } catch { /* Optional UI preference. */ }
     if (!store.conflict && store.pending) store.flush().catch(() => {});
   } catch (error) {
     if (generation !== sessionGeneration) return;
     document.getElementById("auth-message").textContent =
-      ["42P01", "PGRST205"].includes(error.code)
-        ? "Cloud storage needs setup. Run the family-tree SQL migration in Supabase, then retry loading."
+      ["42P01", "42703", "PGRST204", "PGRST205"].includes(error.code)
+        ? "Cloud storage needs setup. Run both family-tree SQL migrations in Supabase, then retry loading."
         : `Could not load your tree: ${error.message}. Your cloud data has not been replaced.`;
+  }
+}
+
+function renderTreePicker() {
+  const select = document.getElementById("tree-select");
+  select.replaceChildren(...treeList.map(tree => {
+    const option = document.createElement("option");
+    option.value = tree.id;
+    option.textContent = tree.name;
+    return option;
+  }));
+  select.value = activeTreeId || "";
+}
+
+function openTreeDialog(mode) {
+  if (treeChanging || !treeCatalog) return;
+  treeDialogMode = mode;
+  document.getElementById("tree-dialog-title").textContent = mode === "create" ? "New Family Tree" : "Rename Family Tree";
+  document.getElementById("tree-name").value = mode === "rename" ? treeList.find(tree => tree.id === activeTreeId)?.name || "" : "";
+  document.getElementById("tree-error").textContent = "";
+  document.getElementById("tree-dialog").showModal();
+  document.getElementById("tree-name").focus();
+}
+
+async function changeTree(id) {
+  if (treeChanging || id === activeTreeId) return;
+  const userId = activeUserId;
+  treeChanging = true;
+  document.getElementById("workspace").inert = true;
+  try {
+    await cloudStore?.flush();
+    const { data, error } = await authClient.auth.getSession();
+    if (error) throw error;
+    if (activeUserId !== userId || data.session?.user.id !== userId) return;
+    await applyAccountSession(data.session, true, id);
+  } catch (error) {
+    reportSync(cloudStore?.conflict ? "conflict" : "error", `Tree switch paused: ${error.message}`);
+    renderTreePicker();
+  } finally {
+    treeChanging = false;
+    document.getElementById("workspace").inert = false;
+  }
+}
+
+async function submitTreeForm(event) {
+  event.preventDefault();
+  if (treeChanging) return;
+  const userId = activeUserId;
+  const catalog = treeCatalog;
+  const id = activeTreeId;
+  const mode = treeDialogMode;
+  const name = document.getElementById("tree-name").value;
+  treeChanging = true;
+  document.getElementById("workspace").inert = true;
+  document.getElementById("save-tree").disabled = true;
+  try {
+    catalog.validateName(name);
+    await cloudStore.flush();
+    if (userId !== activeUserId) return;
+    const result = mode === "create" ? await catalog.create(name) : await catalog.rename(id, name);
+    if (userId !== activeUserId) return;
+    if (mode === "rename") {
+      treeList = treeList.map(tree => tree.id === id ? result : tree);
+      cloudStore.name = result.name;
+      renderTreePicker();
+    }
+    document.getElementById("tree-dialog").close();
+    if (mode === "create") {
+      const { data, error } = await authClient.auth.getSession();
+      if (error) throw error;
+      if (data.session?.user.id === userId) await applyAccountSession(data.session, true, result.id);
+    }
+  } catch (error) {
+    document.getElementById("tree-error").textContent = error.message;
+  } finally {
+    treeChanging = false;
+    document.getElementById("workspace").inert = false;
+    document.getElementById("save-tree").disabled = false;
   }
 }
 

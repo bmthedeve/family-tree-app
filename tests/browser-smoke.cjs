@@ -44,13 +44,14 @@ const server = http.createServer((req, res) => {
         if (!user) return send({ message: 'Not authenticated' }, 401);
         const owner = url.searchParams.get('owner_id')?.replace('eq.', '') || req.postDataJSON()?.owner_id;
         if (owner !== user.id) return send({ message: 'Forbidden' }, 403);
-        const existing = rows.get(owner);
-        if (req.method() === 'GET') return send(existing ? [existing] : []);
+        const id = url.searchParams.get('id')?.replace('eq.', '') || req.postDataJSON()?.id;
+        const existing = rows.get(id);
+        if (req.method() === 'GET') return send(id ? (existing?.owner_id === owner ? [existing] : []) : [...rows.values()].filter(row => row.owner_id === owner));
         const input = req.postDataJSON();
         if (req.method() === 'POST' && existing) return send({ code: '23505' }, 409);
-        if (req.method() === 'PATCH' && Number(url.searchParams.get('revision')?.replace('eq.', '')) !== existing?.revision) return send([]);
-        rows.set(owner, { ...existing, ...input });
-        return send([{ revision: input.revision }]);
+        if (req.method() === 'PATCH' && url.searchParams.has('revision') && Number(url.searchParams.get('revision').replace('eq.', '')) !== existing?.revision) return send([]);
+        rows.set(id, { ...existing, ...input });
+        return send(req.headers().accept?.includes('vnd.pgrst.object') ? rows.get(id) : [rows.get(id)]);
       }
       return send({ message: 'Unexpected mocked API path: ' + url.pathname }, 400);
     });
@@ -135,12 +136,56 @@ const server = http.createServer((req, res) => {
     await page.waitForFunction(() => cy.nodes(':visible').length === 3);
     assert.equal(await page.evaluate(() => cy.nodes(':visible').length), 3);
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
+    const originalTree = await page.locator('#tree-select').inputValue();
+    await page.locator('#new-tree').click();
+    await page.locator('#tree-name').fill('Second family');
+    await page.locator('#save-tree').click();
+    await page.waitForFunction(() => document.querySelector('#tree-select').selectedOptions[0]?.textContent === 'Second family' && !document.querySelector('#workspace').hidden);
+    assert.equal(await page.locator('#people-table-body tr').count(), 0);
+    assert.equal(await page.locator('#undo-button').isDisabled(), true);
+    await page.locator('#name').fill('Second-tree member');
+    await page.locator('#person-submit').click();
+    await page.locator('#rename-tree').click();
+    await page.locator('#tree-name').fill('Named second family');
+    await page.locator('#save-tree').click();
+    await page.waitForFunction(() => document.querySelector('#tree-select').selectedOptions[0]?.textContent === 'Named second family');
+    await page.locator('#tree-select').selectOption(originalTree);
+    await page.waitForFunction(() => !document.querySelector('#workspace').hidden && document.querySelector('#people-table-body').textContent.includes('Daughter'));
+    assert.equal(await page.locator('#people-table-body tr').count(), 3);
+    // Exercise actual pointer box selection and native group drag, not synthetic graph events.
+    await page.locator('#canvas-tab').click();
+    await page.locator('#sidebar-toggle-button').click();
+    await page.locator('#selection-mode').click();
+    await page.waitForTimeout(500); // Existing canvas fit animation must finish before measuring pointer targets.
+    const geometry = await page.evaluate(() => {
+      const rect = document.querySelector('#cy').getBoundingClientRect();
+      return { rect: { x: rect.x, y: rect.y }, nodes: cy.nodes().map(n => ({ id: n.id(), rendered: n.renderedPosition(), width: n.renderedWidth(), position: n.position() })) };
+    });
+    const minX = Math.min(...geometry.nodes.map(n => n.rendered.x - n.width / 2)) - 12;
+    const minY = Math.min(...geometry.nodes.map(n => n.rendered.y - n.width / 2)) - 12;
+    const maxX = Math.max(...geometry.nodes.map(n => n.rendered.x + n.width / 2)) + 12;
+    const maxY = Math.max(...geometry.nodes.map(n => n.rendered.y + n.width / 2)) + 12;
+    await page.mouse.move(geometry.rect.x + minX, geometry.rect.y + minY);
+    await page.mouse.down();
+    await page.mouse.move(geometry.rect.x + maxX, geometry.rect.y + maxY, { steps: 20 });
+    await page.mouse.up();
+    await page.waitForFunction(() => cy.nodes(':selected').length === 3);
+    const lead = geometry.nodes[0].rendered;
+    await page.mouse.move(geometry.rect.x + lead.x, geometry.rect.y + lead.y);
+    await page.mouse.down();
+    await page.mouse.move(geometry.rect.x + lead.x + 55, geometry.rect.y + lead.y + 35, { steps: 15 });
+    await page.mouse.up();
+    const moved = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), position: n.position() })));
+    const deltas = moved.map(n => { const old = geometry.nodes.find(p => p.id === n.id).position; return { x: n.position.x - old.x, y: n.position.y - old.y }; });
+    assert.ok(deltas[0].x > 1 && deltas[0].y > 1);
+    deltas.forEach(delta => { assert.ok(Math.abs(delta.x - deltas[0].x) < 0.01); assert.ok(Math.abs(delta.y - deltas[0].y) < 0.01); });
+    await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
     missingTable = true;
     await page.reload();
     await page.waitForFunction(() => document.querySelector('#auth-message').textContent.includes('needs setup'));
     assert.equal(await visible('#workspace'), false);
     assert.equal(rows.get(users['alice@example.test'].id).document.people.length, 3);
     assert.deepEqual(errors, []);
-    console.log('PASS: auth, cloud save/reload, account isolation, missing-table gate, Undo/sidebar fixes, node spacing, deceased/gender styling, notes, branch collapse persistence, and search expansion');
+    console.log('PASS: named-tree creation/rename/switching, real pointer selection/group movement, auth, cloud save/reload, account isolation, missing-table gate, Undo/sidebar fixes, node spacing, notes, and branch collapse/search');
   } finally { await browser.close(); server.close(); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

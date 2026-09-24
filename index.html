@@ -35,6 +35,9 @@
     <div id="workspace" hidden>
     <div class="account-bar">
       <span id="account-email"></span>
+      <label class="tree-picker"><span>Family tree</span><select id="tree-select" aria-label="Family tree"></select></label>
+      <button id="new-tree" type="button" class="secondary-button">New Tree</button>
+      <button id="rename-tree" type="button" class="secondary-button">Rename</button>
       <span id="sync-status" role="status" aria-live="polite"></span>
       <button id="retry-save" type="button" class="secondary-button" hidden>Retry save</button>
       <button id="reload-cloud" type="button" class="secondary-button" hidden>Reload cloud copy</button>
@@ -174,6 +177,9 @@
             <h2>Family Relationship Map</h2>
           </div>
           <div class="canvas-tools">
+            <button id="selection-mode" type="button" class="secondary-button" aria-pressed="true">Select</button>
+            <button id="pan-mode" type="button" class="secondary-button" aria-pressed="false">Pan</button>
+            <span id="selection-count" role="status" aria-live="polite">0 selected</span>
             <button
               id="sidebar-toggle-button"
               type="button"
@@ -201,7 +207,7 @@
               <button id="table-tab" type="button" class="view-tab" aria-selected="false">Table</button>
             </div>
             <p class="canvas-help">
-              Scroll to zoom, drag the background to pan, shift-drag to area-select, drag selected nodes together, and double-click the background to reset.
+              Select: drag a box around members, then drag any selected member to move the group. Use Pan to move the canvas; Shift-drag selects in either mode. Scroll to zoom.
             </p>
           </div>
         </div>
@@ -253,6 +259,18 @@
         <div class="dialog-actions">
           <button value="cancel" class="secondary-button">Cancel</button>
           <button id="confirm-delete-person" value="confirm" class="danger-button">Move to Recycle Bin</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="tree-dialog" class="app-dialog" aria-labelledby="tree-dialog-title">
+      <form id="tree-form" class="dialog-card">
+        <h2 id="tree-dialog-title">New Family Tree</h2>
+        <label><span>Tree name</span><input id="tree-name" required maxlength="120" autocomplete="off" /></label>
+        <p id="tree-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button id="cancel-tree" type="button" class="secondary-button">Cancel</button>
+          <button id="save-tree" type="submit" class="primary-button">Save</button>
         </div>
       </form>
     </dialog>

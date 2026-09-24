@@ -7,11 +7,13 @@
 - Person records support optional `notes`, `deceased`, and `descendantsCollapsed` fields in the existing JSON cloud document; no database migration is needed.
 - Per-parent −/+ canvas buttons hide descendants via parent links, preserving nested collapse preferences. Search reveals hidden results; Expand All Generations clears all branch folds.
 
-- Supabase email/password accounts each own one private tree in `family_tree_documents`.
+- Supabase email/password accounts can own multiple private named rows in `family_tree_documents`. The tree UUID is the primary key; `owner_id` remains the RLS ownership field.
+- Apply `202609240001_named_family_trees.sql` after the initial migration to preserve existing documents as **My Family Tree** and enable the tree picker, creation, and renaming.
+- Select/Pan canvas tools expose area selection without requiring Shift. Native Cytoscape group dragging moves selected members exactly once (the previous custom follower movement has been removed).
 - New accounts start empty; the former shared sample dataset is no longer loaded.
 - Apply `supabase/migrations/202609230001_private_family_trees.sql` using the dashboard before cloud storage can work. See `supabase/SETUP.md` for redirect URLs and shared Auth considerations.
 - Cloud saves include people, relationships, node positions, and recycle-bin entries. Revision checks prevent stale tabs overwriting newer cloud changes.
-- A tab retains unsaved drafts per account in sessionStorage. Existing legacy localStorage family data remains available for manual export/import and is never automatically uploaded.
+- A tab retains unsaved drafts per account and tree ID in sessionStorage. Existing legacy localStorage family data remains available for manual export/import and is never automatically uploaded.
 - Undo history is session-only; sign-out clears forms, dialogs, graph, and history.
 - The floating Undo toast respects `hidden` and only appears following deletion. Editing from the table opens the sidebar and focuses the name field.
 - The historical localStorage/sample-data notes below describe the earlier version and are superseded by this section.

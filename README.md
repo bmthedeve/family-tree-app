@@ -1,6 +1,6 @@
 # Family Graph
 
-A browser-based family relationship explorer with email/password sign-in and a private cloud-saved family tree for each user. Build and edit a family network, view it as a graph or table, and export it for backup.
+A browser-based family relationship explorer with email/password sign-in and multiple private, named, cloud-saved family trees per user. Build and edit family networks, view them as graphs or tables, and export them for backup.
 
 ## Live app
 
@@ -9,6 +9,7 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 ## Features
 
 - Supabase email/password sign-in and account creation
+- Create, rename, and switch between any number of private trees, subject to your Supabase storage quota
 - Empty starting canvas and private cloud storage for each account
 - Save status, retry, draft recovery, and protection against stale-tab overwrites
 - Add, edit, and delete family members
@@ -22,7 +23,7 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Track current/former spouse status and relationship start/end dates
 - Prevent duplicate, self-referential, and circular ancestor relationships
 - Explore relationships on an interactive, zoomable Cytoscape.js canvas
-- Select multiple people with <kbd>Shift</kbd> + drag and move them together
+- Drag a selection rectangle in **Select** mode, then move all selected people together; use **Pan** to move the canvas
 - Highlight a person's immediate family by selecting their node
 - Switch between graph and table views
 - Collapse the sidebar for a full-width canvas and restore it when needed
@@ -51,6 +52,10 @@ Then open [http://localhost:8000](http://localhost:8000) in a browser.
 The Supabase client, Cytoscape.js library, and Manrope font load from public CDNs. An internet connection is needed to sign in, load cloud data, and save changes.
 
 ## Using the app
+
+The account bar contains a **Family tree** picker, **New Tree**, and **Rename**. Existing trees are preserved as **My Family Tree** after applying the [named-tree migration](supabase/migrations/202609240001_named_family_trees.sql). Each tree has its own people, relationships, recycle bin, recovery draft, and save revision. Switching waits for pending saves and clears the previous tree's undo history. Family-file exports use the tree's name; imports replace only the currently selected tree.
+
+**Select** is the default canvas tool: drag on empty canvas to box-select members, then drag any selected member to move the group while keeping its arrangement. Use **Pan** to drag the background instead. <kbd>Shift</kbd> + drag selects a group in either mode. Only visible members can be selected. Member positions are saved when you release the group.
 
 1. Add people from the sidebar.
 2. Use **Find Person** to search by name, then select a result to center and highlight that person.

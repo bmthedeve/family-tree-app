@@ -24,11 +24,13 @@ function server() {
           async maybeSingle() {
             if (failure) return { data: null, error: failure };
             const owner = filters.owner_id || value?.owner_id;
-            const existing = rows.get(owner);
+            const id = filters.id || value?.id || owner;
+            const existing = rows.get(id);
+            if (existing?.owner_id && existing.owner_id !== owner) return { data: null, error: new Error('Forbidden') };
             if (mode === 'read') return { data: structuredClone(existing || null), error: null };
             if (mode === 'insert' && existing) return { data: null, error: { code: '23505' } };
             if (mode === 'update' && (!existing || existing.revision !== filters.revision)) return { data: null, error: null };
-            rows.set(owner, structuredClone({ ...existing, ...value }));
+            rows.set(id, structuredClone({ ...existing, ...value }));
             return { data: { revision: value.revision }, error: null };
           }
         };
@@ -100,4 +102,31 @@ test('draft from older cloud revision is recoverable but cannot silently overwri
   assert.equal(a.conflict, true);
   await assert.rejects(a.flush(), /Another tab/);
   assert.equal(backend.rows.get('user-a').document.people[0].name, 'Cloud'); a.close();
+});
+
+test('one owner can save multiple trees with separate revisions and recovery drafts', async () => {
+  const backend = server(), drafts = storage();
+  const first = new Store(backend.client, 'owner', drafts, () => {}, 'tree-one', 'First family');
+  const second = new Store(backend.client, 'owner', drafts, () => {}, 'tree-two', 'Second family');
+  await first.load(); await second.load();
+  first.queue(documentFor('First person')); second.queue(documentFor('Second person'));
+  assert.notEqual(first.key, second.key);
+  await first.flush(); await second.flush();
+  assert.equal(backend.rows.get('tree-one').document.people[0].name, 'First person');
+  assert.equal(backend.rows.get('tree-two').document.people[0].name, 'Second person');
+  assert.equal(backend.rows.get('tree-one').name, 'First family');
+  assert.equal(backend.rows.get('tree-two').name, 'Second family');
+  assert.equal(first.revision, 1); assert.equal(second.revision, 1);
+  first.close(); second.close();
+});
+
+test('legacy drafts only migrate into the original owner-ID tree', async () => {
+  const backend = server(), drafts = storage();
+  drafts.setItem('family-tree-draft-v1:owner', JSON.stringify({ revision: 0, document: documentFor('Legacy') }));
+  const other = new Store(backend.client, 'owner', drafts, () => {}, 'another-tree');
+  assert.deepEqual(await other.load(), empty());
+  const original = new Store(backend.client, 'owner', drafts);
+  assert.equal((await original.load()).people[0].name, 'Legacy');
+  assert.equal(drafts.getItem('family-tree-draft-v1:owner'), null);
+  other.close(); original.close();
 });

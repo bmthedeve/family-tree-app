@@ -42,6 +42,12 @@
 #account-email { overflow-wrap: anywhere; }
 #sync-status { flex: 1; font-size: 0.85rem; color: var(--muted); }
 .account-bar button { padding: 7px 12px; }
+.tree-picker { display: flex; align-items: center; gap: 8px; }
+.tree-picker select { width: 200px; padding: 7px 12px; }
+#selection-count { font-size: 0.8rem; white-space: nowrap; align-self: center; }
+.canvas-tools { flex-wrap: wrap; }
+.canvas-tools button[aria-pressed="true"] { background: #ffdb6e; }
+#canvas-view.select-mode { cursor: crosshair; }
 #workspace { height: 100dvh; display: flex; flex-direction: column; }
 #workspace .app-shell { flex: 1; min-height: 0; height: auto; }
 #workspace .panel, #workspace .canvas-wrap { height: 100%; }

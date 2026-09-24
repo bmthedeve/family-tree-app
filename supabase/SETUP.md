@@ -6,11 +6,14 @@ Project: `wmfplutvrinleialgmyz`.
 
 1. Open this project's **SQL Editor** in Supabase.
 2. Run [`migrations/202609230001_private_family_trees.sql`](migrations/202609230001_private_family_trees.sql) once.
-3. Sign in to the family app, or press **Retry loading tree** if already signed in.
+3. Run [`migrations/202609240001_named_family_trees.sql`](migrations/202609240001_named_family_trees.sql) once to enable multiple named trees. If you already applied the first migration, run only this new one.
+4. Sign in to the family app, or press **Retry loading tree** if already signed in.
 
 The migration creates only `public.family_tree_documents` and its owner-only policies. It does not alter existing application tables, Auth settings, or Auth triggers. If a table with this name already exists, the migration fails transactionally; inspect it rather than overwriting it.
 
-Each Supabase Auth user owns one JSON document containing people, relationships, node positions, and a recycle bin. A new account reads an empty canvas; its row is inserted when it makes its first change. The primary key enforces one document per owner. Row Level Security restricts SELECT, INSERT, and UPDATE to `auth.uid() = owner_id`. Anonymous access has no grants or policies. No service-role key is used in the browser.
+Each tree is a separate named row containing people, relationships, node positions, and a recycle bin. Users can create any number of trees (subject to the project's storage quotas). The second migration preserves existing documents, names them **My Family Tree**, and changes the primary key from `owner_id` to a tree `id`. New accounts receive one empty **My Family Tree**. Owner-only Row Level Security remains in effect for every tree. Anonymous access has no grants or policies. No service-role key is used in the browser.
+
+**New Tree**, **Rename**, and the tree dropdown manage your trees. Switching waits for pending saves and clears the previous tree's forms, selection, and undo history. Recovery drafts and revision checks are isolated by both owner and tree ID. The last-opened tree is remembered per account in this browser. Old unsaved drafts are recovered only into the preserved original tree. Existing app tabs should be reloaded after migration.
 
 The supplied publishable key cannot execute migrations. Apply the SQL with the project's dashboard administrator account. Do not paste database passwords or service-role keys into this repository.
 
