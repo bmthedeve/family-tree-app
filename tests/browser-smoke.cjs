@@ -214,6 +214,31 @@ const server = http.createServer((req, res) => {
     await page.screenshot({ path: '/tmp/family-tree-desktop-ui.png' });
     await page.locator('#person-search').fill('');
     await page.keyboard.press('Escape');
+    // Generation controls scale in the same ratio as their member icons, including on hover.
+    const scaleSizes = [];
+    for (const zoom of [0.4, 1.2]) {
+      await page.evaluate(zoom => { cy.stop(); cy.zoom(zoom); cy.pan({ x: 300, y: 200 }); }, zoom);
+      await page.waitForTimeout(80);
+      scaleSizes.push(await page.locator('.generation-toggle').first().evaluate(el => el.getBoundingClientRect().width));
+    }
+    assert.ok(Math.abs(scaleSizes[1] / scaleSizes[0] - 3) < 0.01);
+    assert.ok(scaleSizes[0] < 10, 'Zoomed-out branch controls should be smaller than nodes');
+    await page.locator('#zoom-level').click();
+    assert.equal(await page.locator('#zoom-level').textContent(), '100%');
+    const positionsBeforeZoom = await page.evaluate(() => cy.nodes().map(n => ({ ...n.position() })));
+    const worldCenterBefore = await page.evaluate(() => ({ x: (cy.width() / 2 - cy.pan().x) / cy.zoom(), y: (cy.height() / 2 - cy.pan().y) / cy.zoom() }));
+    await page.locator('#zoom-in').click();
+    assert.equal(await page.locator('#zoom-level').textContent(), '120%');
+    const worldCenterAfter = await page.evaluate(() => ({ x: (cy.width() / 2 - cy.pan().x) / cy.zoom(), y: (cy.height() / 2 - cy.pan().y) / cy.zoom() }));
+    assert.ok(Math.abs(worldCenterBefore.x - worldCenterAfter.x) < 0.01 && Math.abs(worldCenterBefore.y - worldCenterAfter.y) < 0.01);
+    await page.locator('#zoom-out').click();
+    assert.equal(await page.locator('#zoom-level').textContent(), '100%');
+    await page.evaluate(() => { cy.zoom(cy.minZoom()); });
+    assert.equal(await page.locator('#zoom-out').isDisabled(), true);
+    await page.evaluate(() => { cy.zoom(cy.maxZoom()); });
+    assert.equal(await page.locator('#zoom-in').isDisabled(), true);
+    await page.locator('#fit-tree').click();
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ ...n.position() }))), positionsBeforeZoom);
     // Fullscreen hides all chrome and restores the previous view on Esc.
     for (const fallback of [false, true]) {
       await page.locator('#table-tab').click();
@@ -297,6 +322,38 @@ const server = http.createServer((req, res) => {
     const deltas = moved.map(n => { const old = geometry.nodes.find(p => p.id === n.id).position; return { x: n.position.x - old.x, y: n.position.y - old.y }; });
     assert.ok(deltas[0].x > 1 && deltas[0].y > 1);
     deltas.forEach(delta => { assert.ok(Math.abs(delta.x - deltas[0].x) < 0.01); assert.ok(Math.abs(delta.y - deltas[0].y) < 0.01); });
+    // Arrange only the selected members, with one-step undo/redo and saved positions.
+    await page.evaluate(() => {
+      cy.nodes().unselect();
+      cy.nodes().forEach((node, i) => node.position({ x: [50, 170, 500][i], y: [100, 280, 520][i] }));
+      cy.nodes().slice(0, 2).select();
+    });
+    const beforeAlign = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() })));
+    await page.locator('#arrange-toggle').click();
+    assert.equal(await page.locator('[data-arrange="space-x"]').isDisabled(), true);
+    await page.locator('[data-arrange="top"]').click();
+    const aligned = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() })));
+    assert.equal(aligned[0].y, aligned[1].y);
+    assert.deepEqual(aligned[2], beforeAlign[2]);
+    await page.locator('#selection-mode').focus();
+    await page.keyboard.press('Meta+z');
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() }))), beforeAlign);
+    await page.keyboard.press('Meta+Shift+z');
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() }))), aligned);
+    await page.evaluate(() => { cy.nodes().select(); });
+    await page.locator('#arrange-toggle').click();
+    await page.locator('[data-arrange="space-x"]').click();
+    const gaps = await page.evaluate(() => {
+      const n = cy.nodes().sort((a, b) => a.position().x - b.position().x);
+      return [1, 2].map(i => n[i].position().x - n[i].outerWidth() / 2 - n[i - 1].position().x - n[i - 1].outerWidth() / 2);
+    });
+    assert.ok(Math.abs(gaps[0] - gaps[1]) < 0.01 && gaps[0] >= 24);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('#arrange-toggle').click();
+    const mobileArrange = await page.locator('#arrange-menu').boundingBox();
+    assert.ok(mobileArrange.x >= 0 && mobileArrange.x + mobileArrange.width <= 390 && mobileArrange.y >= 0 && mobileArrange.y + mobileArrange.height <= 844);
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
     // Export the selected tree, then import it as a separate named tree.
     const downloaded = page.waitForEvent('download');
@@ -336,6 +393,65 @@ const server = http.createServer((req, res) => {
     assert.equal(await page.locator('#tree-select').inputValue(), importedId);
     await page.locator('#tree-select').selectOption(originalTree);
     await page.waitForFunction(id => !document.querySelector('#workspace').hidden && document.querySelector('#tree-select').value === id, originalTree);
+    // Quick relative creation uses one atomic history/save operation in a separate tree.
+    await page.locator('#new-tree').click();
+    await page.locator('#tree-name').fill('Quick-add test');
+    await page.locator('#save-tree').click();
+    await page.waitForFunction(() => !document.querySelector('#workspace').hidden && document.querySelector('#tree-select').selectedOptions[0]?.textContent === 'Quick-add test');
+    if (!await visible('#sidebar')) await page.locator('#sidebar-toggle-button').click();
+    await page.locator('#name').fill('Anchor');
+    await page.locator('#person-submit').click();
+    const anchorId = await page.evaluate(() => state.people[0].id);
+    for (const type of ['parent', 'child', 'spouse']) {
+      await page.evaluate(() => { cy.nodes().unselect(); });
+      await page.waitForTimeout(500);
+      await clickMember('Anchor');
+      await page.screenshot({ path: '/tmp/family-tree-quick-add-ui.png' });
+      await page.locator(`#member-quick-actions [data-quick-add="${type}"]`).click();
+      assert.equal(await page.locator('#person-form-title').textContent(), `Add ${type[0].toUpperCase() + type.slice(1)}`);
+      const before = await page.evaluate(() => ({ people: state.people.length, history: undoStack.length, relationships: state.relationships.length }));
+      if (type === 'parent') {
+        await page.locator('#person-cancel').click();
+        assert.equal(await page.evaluate(() => state.people.length), before.people);
+        await page.locator('#member-quick-actions [data-quick-add="parent"]').click();
+      }
+      await page.locator('#name').fill(`Quick ${type}`);
+      if (type === 'child') {
+        await page.locator('#dob').fill('2020-01-01');
+        await page.locator('#dod').fill('2010-01-01');
+        await page.locator('#person-submit').click();
+        assert.equal(await page.evaluate(() => state.people.length), before.people);
+        await page.locator('#dod').fill('');
+      }
+      await page.locator('#person-submit').click();
+      assert.equal(await page.evaluate(() => undoStack.length), before.history + 1);
+      assert.equal(await page.evaluate(({ type, anchorId }) => {
+        const person = state.people.find(p => p.name === `Quick ${type}`);
+        return state.relationships.some(r => r.type === (type === 'spouse' ? 'spouse' : 'parent') && r.from === (type === 'parent' ? person.id : anchorId) && r.to === (type === 'parent' ? anchorId : person.id));
+      }, { type, anchorId }), true);
+      await page.locator('#undo-button').click();
+      assert.equal(await page.evaluate(() => state.people.length), before.people);
+      assert.equal(await page.evaluate(() => state.relationships.length), before.relationships);
+      await page.locator('#redo-button').click();
+      assert.equal(await page.evaluate(() => state.people.length), before.people + 1);
+    }
+    await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
+    await page.reload();
+    await page.locator('#workspace').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#people-table-body tr').count(), 4);
+    // Table editor has the same quick actions and reveals folded ancestors on save.
+    await page.getByRole('button', { name: 'Collapse descendants of Quick parent', exact: true }).click();
+    await page.locator('#table-tab').click();
+    await page.getByRole('button', { name: 'Edit Anchor', exact: true }).click();
+    await page.locator('#editor-relative-actions [data-quick-add="child"]').click();
+    await page.locator('#name').fill('Visible child');
+    await page.locator('#person-submit').click();
+    await page.locator('#canvas-tab').click();
+    await page.waitForFunction(() => cy.nodes(':visible').length === 5);
+    assert.equal(await page.evaluate(() => state.people.find(p => p.name === 'Quick parent').descendantsCollapsed), false);
+    await page.locator('#tree-select').selectOption(originalTree);
+    await page.waitForFunction(id => !document.querySelector('#workspace').hidden && document.querySelector('#tree-select').value === id, originalTree);
+    await page.locator('#canvas-tab').click();
     // Search is also accessible in the dedicated canvas-only tab.
     const canvasPage = await context.newPage();
     await canvasPage.goto(`http://127.0.0.1:${server.address().port}/?view=canvas`);
@@ -362,6 +478,6 @@ const server = http.createServer((req, res) => {
     assert.equal(await visible('#workspace'), false);
     assert.equal(rows.get(users['alice@example.test'].id).document.people.length, 3);
     assert.deepEqual(errors, []);
-    console.log('PASS: toolbar search, Pan-to-edit, relationship choices, neutral generation controls, native/fallback fullscreen, export/import round trip and safe cancellation, plus selection/group movement, named trees, auth isolation, Undo, notes, and branch search');
+    console.log('PASS: scaled generation controls, zoom/fit, selection alignment/spacing with undo, atomic quick parent/child/spouse creation, plus all previous browser regressions');
   } finally { await browser.close(); server.close(); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

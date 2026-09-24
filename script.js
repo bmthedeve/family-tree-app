@@ -99,6 +99,8 @@ let treeChanging = false;
 let pendingImport = null;
 let fullscreenView = null;
 let nativeFullscreenEntered = false;
+let quickAddContext = null;
+let searchJumpTimer = null;
 
 initialize();
 startCloudAuth();
@@ -334,10 +336,11 @@ function personNodeData(person) {
   };
 }
 
-function nextPersonPosition() {
+function nextPersonPosition(preferred) {
   const nodes = cy.nodes();
   const visible = nodes.filter(node => node.visible());
-  const anchor = visible.length ? visible[visible.length - 1].position() : { x: 0, y: 0 };
+  const anchor = preferred || (visible.length ? visible[visible.length - 1].position() : { x: 0, y: 0 });
+  if (preferred && nodes.every(node => Math.hypot(node.position().x - preferred.x, node.position().y - preferred.y) >= 100)) return { ...preferred };
   if (!nodes.length) return { ...anchor };
   // Search nearby grid cells without moving any existing member.
   for (let radius = 1; radius <= nodes.length + 1; radius++) {
@@ -395,8 +398,9 @@ function renderGenerationControls() {
     button.setAttribute("aria-label", `${person.descendantsCollapsed ? "Expand" : "Collapse"} descendants of ${person.name}`);
     button.setAttribute("aria-expanded", String(!person.descendantsCollapsed));
     button.title = button.getAttribute("aria-label");
-    button.style.left = `${point.x + node.renderedWidth() / 2}px`;
-    button.style.top = `${point.y - 14}px`;
+    button.style.left = `${point.x + node.renderedOuterWidth() / 2 + 4 * cy.zoom()}px`;
+    button.style.top = `${point.y - 9}px`;
+    button.style.transform = `scale(${cy.zoom()})`;
     // Branch controls remain neutral and fade with unrelated nodes, not above them.
     button.style.opacity = node.style("opacity");
     if (!button.parentElement) controls.append(button);
@@ -416,14 +420,38 @@ function relationshipColor(type) {
 
 function attachEvents() {
   attachContainedBoxSelection();
+  document.getElementById("zoom-in").addEventListener("click", () => zoomCanvas(cy.zoom() * 1.2));
+  document.getElementById("zoom-out").addEventListener("click", () => zoomCanvas(cy.zoom() / 1.2));
+  document.getElementById("zoom-level").addEventListener("click", () => zoomCanvas(1));
+  document.getElementById("fit-tree").addEventListener("click", fitVisibleTree);
+  document.getElementById("arrange-toggle").addEventListener("click", () => {
+    const menu = document.getElementById("arrange-menu");
+    menu.hidden = !menu.hidden;
+    document.getElementById("arrange-toggle").setAttribute("aria-expanded", String(!menu.hidden));
+    if (!menu.hidden) positionToolbarPanel(menu, document.getElementById("arrange-toggle"));
+  });
+  document.getElementById("arrange-menu").addEventListener("click", event => {
+    const button = event.target.closest("button[data-arrange]");
+    if (button) arrangeSelectedMembers(button.dataset.arrange, button.textContent);
+  });
+  document.querySelectorAll("[data-quick-add]").forEach(button => button.addEventListener("click", () => {
+    const personId = button.closest("#editor-relative-actions") ? editingPersonId : cy.nodes(":selected:visible")[0]?.id();
+    startQuickAdd(personId, button.dataset.quickAdd);
+  }));
+  cy.on("zoom", updateCanvasControls);
+  // These events can fire inside a style batch. Read visibility only after it finishes.
+  cy.on("add remove select unselect", "node", () => queueMicrotask(updateCanvasControls));
   refs.findPersonButton.addEventListener("click", openPersonSearch);
   document.addEventListener("pointerdown", event => {
+    if (!event.target.closest(".arrange-tool")) closeArrangeMenu();
     if (!refs.searchPanel.contains(event.target) && !refs.findPersonButton.contains(event.target)) {
       closeFloatingSearch();
     }
   });
   document.addEventListener("scroll", event => {
     if (!refs.searchPanel.hidden && !refs.searchPanel.contains(event.target)) positionPersonSearch();
+    const arrangeMenu = document.getElementById("arrange-menu");
+    if (!arrangeMenu.hidden && !arrangeMenu.contains(event.target)) positionToolbarPanel(arrangeMenu, document.getElementById("arrange-toggle"));
   }, true);
   document.getElementById("fullscreen-button").addEventListener("click", enterCanvasFullscreen);
   document.addEventListener("fullscreenchange", () => {
@@ -436,6 +464,7 @@ function attachEvents() {
     document.getElementById("selection-count").textContent = `${cy.nodes(":selected").length} selected`;
   });
   setCanvasTool("select");
+  updateCanvasControls();
   document.getElementById("expand-generations").addEventListener("click", () => {
     state.people.forEach(person => { person.descendantsCollapsed = false; });
     saveState();
@@ -542,7 +571,7 @@ function handleAddPerson(event) {
       updatePerson(person);
       showMessage(`Updated ${person.name}.`);
     } else {
-      addPerson(person);
+      addPerson(person, quickAddContext);
       showMessage(`Added ${person.name}.`);
     }
     resetPersonForm();
@@ -572,7 +601,7 @@ function handleAddRelationship(event) {
   }
 }
 
-function addPerson(personInput) {
+function addPerson(personInput, relative = null) {
   const person = {
     ...personInput,
     name: personInput.name.trim()
@@ -590,8 +619,13 @@ function addPerson(personInput) {
     throw new Error("Date of death cannot be before date of birth.");
   }
 
-  recordHistory(`Add ${person.name}`);
-  person.position = nextPersonPosition();
+  if (relative && (!findPerson(relative.personId) || !["parent", "child", "spouse"].includes(relative.type))) {
+    throw new Error("The relative is no longer available. Cancel and choose a member again.");
+  }
+  recordHistory(relative ? `Add ${relative.type} ${person.name}` : `Add ${person.name}`);
+  const anchor = relative ? cy.getElementById(relative.personId).position() : null;
+  const preferred = anchor ? { x: anchor.x + (relative.type === "spouse" ? 140 : 0), y: anchor.y + (relative.type === "parent" ? -140 : relative.type === "child" ? 140 : 0) } : null;
+  person.position = nextPersonPosition(preferred);
   state.people.push(person);
   cy.add({
     group: "nodes",
@@ -606,11 +640,25 @@ function addPerson(personInput) {
       dateOfDeath: person.dateOfDeath || ""
     }
   });
+  if (relative) {
+    // A brand-new node cannot introduce an ancestor cycle. Keep this one undo/save operation.
+    const relationship = relative.type === "parent" ? { from: person.id, to: relative.personId, type: "parent" }
+      : relative.type === "child" ? { from: relative.personId, to: person.id, type: "parent" }
+      : { from: relative.personId, to: person.id, type: "spouse", status: "current", startDate: "", endDate: "" };
+    const connections = relative.type === "spouse" ? [relationship, { ...relationship, from: person.id, to: relative.personId }] : [relationship];
+    connections.forEach(connection => {
+      state.relationships.push(connection);
+      cy.add({ group: "edges", data: edgeData(connection) });
+    });
+    state.people.forEach(member => {
+      if (member.descendantsCollapsed && (member.id === relative.personId || descendantsOf(member.id).has(relative.personId))) member.descendantsCollapsed = false;
+    });
+  }
   populatePersonSelects();
   refreshStats();
   renderPeopleTable();
   saveState();
-  if (!refs.canvasView.classList.contains("hidden")) cy.fit(cy.elements(":visible"), getFitPadding());
+  if (!refs.canvasView.classList.contains("hidden")) fitVisibleTree();
 }
 
 function updatePerson(personInput) {
@@ -1042,7 +1090,7 @@ function runLayout(fitView = false, forceAutoLayout = false) {
   const layoutName = forceAutoLayout ? "cose" : hasSavedPositions ? "preset" : "cose";
   const layout = cy.layout({
     name: layoutName,
-    animate: true,
+    animate: layoutName !== "preset",
     fit: fitView,
     padding: getFitPadding(),
     nodeRepulsion: 160000,
@@ -1262,6 +1310,8 @@ function setActiveView(view) {
   refs.tableTab.classList.toggle("active", !showCanvas);
   refs.canvasTab.setAttribute("aria-selected", String(showCanvas));
   refs.tableTab.setAttribute("aria-selected", String(!showCanvas));
+  document.getElementById("canvas-actions").hidden = !showCanvas;
+  closeArrangeMenu();
 
   if (showCanvas) {
     clearHighlight();
@@ -1327,10 +1377,14 @@ function openPersonSearch() {
 }
 
 function positionPersonSearch() {
-  const anchor = refs.findPersonButton.getBoundingClientRect();
-  const panel = refs.searchPanel.getBoundingClientRect();
-  refs.searchPanel.style.left = `${Math.max(12, Math.min(anchor.right - panel.width, innerWidth - panel.width - 12))}px`;
-  refs.searchPanel.style.top = `${Math.max(12, Math.min(anchor.bottom + 8, innerHeight - panel.height - 12))}px`;
+  positionToolbarPanel(refs.searchPanel, refs.findPersonButton);
+}
+
+function positionToolbarPanel(element, button) {
+  const anchor = button.getBoundingClientRect();
+  const panel = element.getBoundingClientRect();
+  element.style.left = `${Math.max(12, Math.min(anchor.right - panel.width, innerWidth - panel.width - 12))}px`;
+  element.style.top = `${Math.max(12, Math.min(anchor.bottom + 8, innerHeight - panel.height - 12))}px`;
 }
 
 function closeFloatingSearch() {
@@ -1415,9 +1469,13 @@ function handleWindowResize() {
     return;
   }
 
+  clearTimeout(searchJumpTimer);
+  cy.stop(true);
   cy.resize();
   cy.fit(undefined, getFitPadding());
   if (!refs.searchPanel.hidden) positionPersonSearch();
+  const arrangeMenu = document.getElementById("arrange-menu");
+  if (!arrangeMenu.hidden) positionToolbarPanel(arrangeMenu, document.getElementById("arrange-toggle"));
 }
 
 function setCanvasTool(tool) {
@@ -1426,6 +1484,73 @@ function setCanvasTool(tool) {
   document.getElementById("selection-mode").setAttribute("aria-pressed", String(selecting));
   document.getElementById("pan-mode").setAttribute("aria-pressed", String(!selecting));
   refs.canvasView.classList.toggle("select-mode", selecting);
+}
+
+function zoomCanvas(level) {
+  cy.stop(true);
+  cy.zoom({ level: Math.max(cy.minZoom(), Math.min(cy.maxZoom(), level)), renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+}
+
+function fitVisibleTree() {
+  clearTimeout(searchJumpTimer);
+  cy.stop(true);
+  if (cy.nodes(":visible").length) cy.fit(cy.elements(":visible"), getFitPadding());
+  else { cy.zoom(1); cy.pan({ x: cy.width() / 2, y: cy.height() / 2 }); }
+}
+
+function closeArrangeMenu() {
+  document.getElementById("arrange-menu").hidden = true;
+  document.getElementById("arrange-toggle").setAttribute("aria-expanded", "false");
+}
+
+function updateCanvasControls() {
+  const selected = cy.nodes(":selected:visible");
+  document.getElementById("zoom-level").textContent = `${Math.round(cy.zoom() * 100)}%`;
+  document.getElementById("zoom-in").disabled = cy.zoom() >= cy.maxZoom() - 0.0001;
+  document.getElementById("zoom-out").disabled = cy.zoom() <= cy.minZoom() + 0.0001;
+  document.getElementById("arrange-toggle").disabled = selected.length < 2;
+  if (selected.length < 2) closeArrangeMenu();
+  document.querySelectorAll("[data-arrange^='space']").forEach(button => { button.disabled = selected.length < 3; });
+  document.getElementById("member-quick-actions").hidden = selected.length !== 1;
+  document.getElementById("quick-member-name").textContent = selected.length === 1 ? selected[0].data("label") : "";
+  document.getElementById("quick-member-name").title = document.getElementById("quick-member-name").textContent;
+}
+
+function arrangeSelectedMembers(action, label) {
+  const selected = cy.nodes(":selected:visible");
+  if (selected.length < (action.startsWith("space") ? 3 : 2)) return;
+  cy.stop();
+  const members = selected.map(node => ({ id: node.id(), ...node.position(), width: node.outerWidth(), height: node.outerHeight() }));
+  const positions = arrangeMembers(members, action);
+  if (positions.some(position => {
+    const old = cy.getElementById(position.id).position();
+    return Math.abs(old.x - position.x) > 0.001 || Math.abs(old.y - position.y) > 0.001;
+  })) {
+    recordHistory(label);
+    cy.batch(() => positions.forEach(position => cy.getElementById(position.id).position({ x: position.x, y: position.y })));
+    saveState();
+  }
+  closeArrangeMenu();
+  document.getElementById("canvas-action-status").textContent = `${label}: ${selected.length} members.`;
+}
+
+async function startQuickAdd(personId, type) {
+  const person = findPerson(personId);
+  if (!person || !["parent", "child", "spouse"].includes(type)) return;
+  await exitCanvasFullscreen();
+  resetPersonForm();
+  quickAddContext = { personId, type };
+  document.body.classList.remove("canvas-only-mode");
+  if (document.body.classList.contains("sidebar-collapsed")) toggleSidebar();
+  document.getElementById("person-form-title").textContent = `Add ${capitalize(type)}`;
+  document.getElementById("quick-add-context").textContent = `New ${type} of ${person.name}. Saving creates the person and relationship together.`;
+  document.getElementById("quick-add-context").hidden = false;
+  refs.personSubmit.textContent = `Add ${capitalize(type)}`;
+  refs.personCancel.classList.remove("hidden-button");
+  refs.personCancel.textContent = "Cancel";
+  document.getElementById("person-form-title").scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("name").focus({ preventScroll: true });
+  requestAnimationFrame(handleWindowResize);
 }
 
 function handleTableActions(event) {
@@ -1463,6 +1588,10 @@ function startEditingPerson(personId) {
     toggleSidebar();
   }
   editingPersonId = personId;
+  quickAddContext = null;
+  document.getElementById("quick-add-context").hidden = true;
+  document.getElementById("editor-relative-actions").hidden = false;
+  refs.personCancel.textContent = "Cancel Edit";
   document.getElementById("name").value = person.name;
   document.getElementById("gender").value = person.gender;
   document.getElementById("dob").value = person.dateOfBirth || "";
@@ -1472,13 +1601,17 @@ function startEditingPerson(personId) {
   refs.personSubmit.textContent = "Save Changes";
   document.getElementById("person-form-title").textContent = "Edit Person";
   refs.personCancel.classList.remove("hidden-button");
-  refs.personForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.getElementById("person-form-title").scrollIntoView({ behavior: "smooth", block: "start" });
   document.getElementById("name").focus({ preventScroll: true });
   showMessage(`Editing ${person.name}.`);
 }
 
 function resetPersonForm() {
   editingPersonId = null;
+  quickAddContext = null;
+  document.getElementById("quick-add-context").hidden = true;
+  document.getElementById("editor-relative-actions").hidden = true;
+  refs.personCancel.textContent = "Cancel Edit";
   refs.personForm.reset();
   document.getElementById("gender").value = "male";
   refs.personSubmit.textContent = "Add Person";
@@ -1770,7 +1903,8 @@ function jumpToPerson(personId) {
     return;
   }
   setActiveView("canvas");
-  setTimeout(() => {
+  clearTimeout(searchJumpTimer);
+  searchJumpTimer = setTimeout(() => {
     highlightNeighborhood(personId);
     cy.animate(
       { center: { eles: node }, zoom: Math.max(cy.zoom(), 1.15), duration: 350 },
@@ -1784,6 +1918,11 @@ function jumpToPerson(personId) {
 }
 
 function handleHistoryShortcut(event) {
+  if (event.key === "Escape" && !document.getElementById("arrange-menu").hidden) {
+    closeArrangeMenu();
+    document.getElementById("arrange-toggle").focus();
+    return;
+  }
   if (event.key === "Escape" && fullscreenView) {
     event.preventDefault();
     exitCanvasFullscreen();
@@ -1994,10 +2133,15 @@ async function applyAccountSession(session, force = false, requestedTreeId = nul
   const user = session?.user;
   if (!force && user && user.id === activeUserId) return;
   const generation = ++sessionGeneration;
+  clearTimeout(searchJumpTimer);
+  // A previous tree's camera animation must not move the new tree off screen.
+  cy.stop(true);
+  cy.elements().stop(true);
   exitCanvasFullscreen();
   closeFloatingSearch();
   pendingImport = null;
   document.getElementById("file-status").textContent = "";
+  document.getElementById("canvas-action-status").textContent = "";
   cloudStore?.close();
   cloudStore = null;
   cloudApplying = true;

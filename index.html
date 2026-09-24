@@ -60,6 +60,12 @@
 
         <section class="card">
           <h2 id="person-form-title">Add Person</h2>
+          <div id="editor-relative-actions" class="relative-actions" aria-label="Add a relative" hidden>
+            <button type="button" class="secondary-button" data-quick-add="parent">+ Parent</button>
+            <button type="button" class="secondary-button" data-quick-add="child">+ Child</button>
+            <button type="button" class="secondary-button" data-quick-add="spouse">+ Spouse</button>
+          </div>
+          <p id="quick-add-context" class="panel-copy" hidden></p>
           <form id="person-form" class="form-grid">
             <label>
               <span>Name</span>
@@ -219,6 +225,34 @@
             </p>
           </div>
         </div>
+        <div id="canvas-actions" class="canvas-actions" aria-label="Canvas controls">
+          <div class="zoom-controls" role="group" aria-label="Zoom controls">
+            <button id="zoom-out" type="button" class="secondary-button" aria-label="Zoom out" title="Zoom out">−</button>
+            <button id="zoom-level" type="button" class="secondary-button" aria-label="Reset zoom to 100 percent" title="Reset zoom to 100%">100%</button>
+            <button id="zoom-in" type="button" class="secondary-button" aria-label="Zoom in" title="Zoom in">+</button>
+            <button id="fit-tree" type="button" class="secondary-button" title="Fit visible members without moving them">Fit Tree</button>
+          </div>
+          <div class="arrange-tool">
+            <button id="arrange-toggle" type="button" class="secondary-button" aria-expanded="false" aria-controls="arrange-menu" title="Select at least two members to align them" disabled>Arrange</button>
+            <div id="arrange-menu" class="arrange-menu" role="group" aria-label="Arrange selected members" hidden>
+              <button type="button" data-arrange="left">Align left</button>
+              <button type="button" data-arrange="center-x">Center horizontally</button>
+              <button type="button" data-arrange="right">Align right</button>
+              <button type="button" data-arrange="top">Align top</button>
+              <button type="button" data-arrange="center-y">Center vertically</button>
+              <button type="button" data-arrange="bottom">Align bottom</button>
+              <button type="button" data-arrange="space-x">Space horizontally</button>
+              <button type="button" data-arrange="space-y">Space vertically</button>
+            </div>
+          </div>
+          <div id="member-quick-actions" class="relative-actions" aria-label="Add a relative to the selected member" hidden>
+            <span id="quick-member-name"></span>
+            <button type="button" class="secondary-button" data-quick-add="parent">+ Parent</button>
+            <button type="button" class="secondary-button" data-quick-add="child">+ Child</button>
+            <button type="button" class="secondary-button" data-quick-add="spouse">+ Spouse</button>
+          </div>
+          <span id="canvas-action-status" role="status" aria-live="polite"></span>
+        </div>
         <div id="canvas-view" class="view-panel active">
           <div id="cy"></div>
           <div id="generation-controls" aria-label="Generation controls"></div>
@@ -364,6 +398,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
     <script src="supabase-config.js"></script>
     <script src="cloud-store.js"></script>
+    <script src="canvas-layout.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

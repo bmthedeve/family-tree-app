@@ -358,11 +358,13 @@ button:disabled {
 textarea { resize: vertical; }
 #generation-controls { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .generation-toggle {
-  position: absolute; pointer-events: auto; width: 28px; height: 28px;
+  position: absolute; pointer-events: auto; width: 18px; height: 18px;
   padding: 0; border-radius: 50%; background: #fffaf1; color: #231d14;
   border: 1px solid #a69d8f; font-weight: 500; box-shadow: none;
+  font-size: 12px; line-height: 1; transform-origin: left center;
+  transition: background 160ms ease;
 }
-.generation-toggle:hover { transform: none; background: #f1eadf; }
+.generation-toggle:hover { background: #f1eadf; }
 .generation-toggle:focus-visible { outline: 2px solid #746c60; outline-offset: 2px; }
 
 .female {
@@ -388,6 +390,18 @@ textarea { resize: vertical; }
   align-items: flex-start;
   padding: 24px 24px 0;
 }
+
+.canvas-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 24px 12px; }
+.zoom-controls, .relative-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.canvas-actions button, .relative-actions button { padding: 8px 12px; font-size: 0.82rem; }
+#zoom-level { min-width: 64px; font-variant-numeric: tabular-nums; }
+#quick-member-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
+#canvas-action-status { font-size: 0.8rem; color: var(--muted); }
+#editor-relative-actions { margin: 12px 0; }
+.arrange-tool { position: relative; }
+.arrange-menu { position: fixed; z-index: 30; width: 210px; max-height: 45dvh; overflow: auto; padding: 8px; border: 1px solid var(--panel-border); border-radius: 16px; background: #fffcf5; box-shadow: var(--shadow); display: grid; gap: 4px; }
+.arrange-menu button { text-align: left; border-radius: 8px; background: transparent; }
+.arrange-menu button:hover { background: #f1eadf; }
 
 .canvas-tools {
   flex: 1;
@@ -604,6 +618,7 @@ body.canvas-fullscreen #workspace .canvas-wrap {
 body.canvas-fullscreen .account-bar,
 body.canvas-fullscreen .panel,
 body.canvas-fullscreen .canvas-header,
+body.canvas-fullscreen .canvas-actions,
 body.canvas-fullscreen .sidebar-resize-handle,
 body.canvas-fullscreen #tooltip,
 body.canvas-fullscreen #undo-toast,

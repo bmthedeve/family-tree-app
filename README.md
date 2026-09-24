@@ -25,6 +25,9 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Prevent duplicate, self-referential, and circular ancestor relationships
 - Explore relationships on an interactive, zoomable Cytoscape.js canvas
 - Drag a selection rectangle in **Select** mode, then move all selected people together; use **Pan** to move the canvas
+- Align selected members or give them equal horizontal/vertical spacing, with Undo/Redo
+- Use zoom buttons, a live zoom percentage, and Fit Tree without rearranging member positions
+- Quick-add a selected member's parent, child, or spouse with the relationship created automatically
 - Highlight a person's immediate family by selecting their node
 - Switch between graph and table views
 - Collapse the sidebar for a full-width canvas and restore it when needed
@@ -63,6 +66,12 @@ Choose a tree and click **Export Tree** to download its `.familygraph.json` file
 
 In **Pan** mode, click a member to open the sidebar directly in edit mode. Dragging a member still moves it without opening the form. The **Fullscreen** button hides the account bar, sidebar, and canvas toolbar. Press <kbd>Esc</kbd> to restore the previous view, or click a member in Pan mode to leave fullscreen and edit. When native browser fullscreen is unavailable, the same distraction-free layout fills the browser viewport. The separate canvas-tab button remains available as well.
 
+The canvas control strip provides **− / +** zoom buttons, the current zoom percentage (click it for 100%), and **Fit Tree** to frame all visible members without changing their positions. Generation −/+ buttons scale with the diagram, including at low zoom levels.
+
+Select at least two members and open **Arrange** for left/right/top/bottom alignment or horizontal/vertical centering. Select three or more for equal edge-to-edge spacing. Spacing keeps at least 24 diagram units between icons; crowded selections expand to make room. Only selected visible members move, positions save to the active tree, and each arrangement can be undone in one step.
+
+Select one member to reveal **+ Parent**, **+ Child**, and **+ Spouse** beside their name in the canvas controls. These actions also appear above the sidebar editor when editing a person. Fill in the new relative's details and save to create both the member and their relationship as one undoable change. Cancel makes no changes. Parents start above, children below, and spouses beside the chosen member where space allows; occupied positions are avoided. Hidden ancestor branches open so the new relative can be seen. Spouses start with current status; edit the relationship to add dates or change status.
+
 1. Add people from the sidebar.
 2. Click the magnifying glass beside Select/Pan to open **Find Person**, even with the sidebar closed. Choose a result to center and highlight that person. The popover closes after choosing a result, clicking outside, or pressing Esc.
 3. Choose two people and define their relationship. Person A, Person B, and relationship details remain selected after adding the relationship. Spouse relationships can include status and dates.
@@ -98,10 +107,11 @@ Parent relationships are stored as `parent -> child`. A relationship entered as 
 ├── index.html        # Application markup
 ├── style.css         # Layout and visual styling
 ├── script.js         # State, graph rendering, and interactions
+├── canvas-layout.js  # Pure selected-member alignment and spacing calculations
 ├── cloud-store.js    # Account-scoped cloud persistence and write conflicts
 ├── supabase-config.js # Public project URL and publishable key
 ├── supabase/         # Database migration and setup instructions
-├── tests/            # Cloud-store unit tests and mocked browser smoke test
+├── tests/            # Layout/cloud-store unit tests and mocked browser smoke test
 └── PROJECT_NOTES.md  # Implementation notes and feature history
 ```
 

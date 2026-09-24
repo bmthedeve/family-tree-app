@@ -2,6 +2,9 @@
 
 ## Current cloud architecture (September 2026)
 
+- Generation controls use 18px model-space buttons scaled by Cytoscape zoom, including their border and symbol; they do not stay fixed-size over zoomed-out nodes.
+- The canvas control strip contains zoom out/in, click-to-reset percentage, Fit Tree (visible elements only), and Arrange. Alignment/spacing uses `canvas-layout.js`, touches only visible selected nodes, and creates one undo snapshot per operation. Spacing has a minimum 24-unit gap.
+- Single-member selection and the sidebar editor expose quick Parent/Child/Spouse actions. The form stores a temporary relative context; save creates the person/relationship atomically and unfolds hidden ancestors, with a single history entry. Cancel and invalid input do not change the tree.
 - New nodes get collision-free positions near visible members; existing positions remain unchanged.
 - Gender is shown with both shape and color. A deceased flag or death date adds a subtle 1px dashed border, without a symbol beside the name.
 - Cmd/Ctrl + Backslash toggles the sidebar, including from form fields (except while a dialog is open). Search is now exclusively an on-demand toolbar popover in both normal and canvas-only views; it does not open the sidebar.
