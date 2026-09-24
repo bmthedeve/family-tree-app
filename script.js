@@ -96,6 +96,9 @@ let treeCatalog = null;
 let treeList = [];
 let treeDialogMode = "create";
 let treeChanging = false;
+let pendingImport = null;
+let fullscreenView = null;
+let nativeFullscreenEntered = false;
 
 initialize();
 startCloudAuth();
@@ -394,6 +397,8 @@ function renderGenerationControls() {
     button.title = button.getAttribute("aria-label");
     button.style.left = `${point.x + node.renderedWidth() / 2}px`;
     button.style.top = `${point.y - 14}px`;
+    // Branch controls remain neutral and fade with unrelated nodes, not above them.
+    button.style.opacity = node.style("opacity");
     if (!button.parentElement) controls.append(button);
   });
   existing.forEach((button, id) => { if (!retained.has(id)) button.remove(); });
@@ -413,9 +418,17 @@ function attachEvents() {
   attachContainedBoxSelection();
   refs.findPersonButton.addEventListener("click", openPersonSearch);
   document.addEventListener("pointerdown", event => {
-    if (isCanvasOnlyMode && !refs.searchPanel.contains(event.target) && !refs.findPersonButton.contains(event.target)) {
+    if (!refs.searchPanel.contains(event.target) && !refs.findPersonButton.contains(event.target)) {
       closeFloatingSearch();
     }
+  });
+  document.addEventListener("scroll", event => {
+    if (!refs.searchPanel.hidden && !refs.searchPanel.contains(event.target)) positionPersonSearch();
+  }, true);
+  document.getElementById("fullscreen-button").addEventListener("click", enterCanvasFullscreen);
+  document.addEventListener("fullscreenchange", () => {
+    if (document.fullscreenElement) nativeFullscreenEntered = true;
+    else if (nativeFullscreenEntered) restoreFullscreenView();
   });
   document.getElementById("selection-mode").addEventListener("click", () => setCanvasTool("select"));
   document.getElementById("pan-mode").addEventListener("click", () => setCanvasTool("pan"));
@@ -468,8 +481,13 @@ function attachEvents() {
   refs.peopleTableBody.addEventListener("click", handleTableActions);
   refs.resizeHandle.addEventListener("pointerdown", startSidebarResize);
 
-  cy.on("tap", "node", (event) => {
+  cy.on("tap", "node", async (event) => {
     const node = event.target;
+    if (cy.userPanningEnabled()) {
+      await exitCanvasFullscreen();
+      startEditingPerson(node.id());
+      return;
+    }
     highlightNeighborhood(node.id());
     centerOnNode(node);
   });
@@ -547,7 +565,7 @@ function handleAddRelationship(event) {
   try {
     addRelationship({ from, to, type, ...metadata });
     showMessage(`Added ${type} relationship.`);
-    event.currentTarget.reset();
+    // Keep the last people and relationship details ready for the next edit.
     toggleSpouseDetails(refs.relationshipType, refs.newSpouseDetails);
   } catch (error) {
     showMessage(error.message, true);
@@ -1091,7 +1109,8 @@ function exportFamilyFile() {
   link.href = url;
   link.download = `${exportPayload.name.replace(/[^\p{L}\p{N} _-]/gu, "_")}.familygraph.json`;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  document.getElementById("file-status").textContent = `Downloaded ${exportPayload.name}.`;
 }
 
 function importFamilyFile(event) {
@@ -1100,10 +1119,13 @@ function importFamilyFile(event) {
     return;
   }
 
+  const generation = sessionGeneration;
   const reader = new FileReader();
   reader.onload = () => {
+    if (generation !== sessionGeneration || treeChanging || !treeCatalog) return;
     try {
       const parsed = JSON.parse(String(reader.result));
+      if (parsed?.version !== undefined && parsed.version !== 1) throw new Error("Unsupported family file version.");
       const importedData =
         parsed && Array.isArray(parsed.people) && Array.isArray(parsed.relationships)
           ? parsed
@@ -1113,41 +1135,24 @@ function importFamilyFile(event) {
         throw new Error("Invalid family graph file.");
       }
 
-      loadImportedState(importedData);
-      showMessage(`Imported ${importedData.people.length} people from ${file.name}.`);
+      validateFamilyData(importedData);
+      pendingImport = {
+        id: crypto.randomUUID(),
+        name: (typeof parsed.name === "string" ? parsed.name : file.name.replace(/(?:\.familygraph)?\.json$/i, "")).trim().slice(0, 100) || "Imported Family Tree",
+        document: { people: importedData.people, relationships: importedData.relationships, recycleBin: [] }
+      };
+      openTreeDialog("import");
     } catch (error) {
-      showMessage(error.message || "Failed to import family graph file.", true);
+      document.getElementById("file-status").textContent = error.message || "Failed to import family graph file.";
     } finally {
       refs.importDataInput.value = "";
     }
   };
-
+  reader.onerror = () => {
+    if (generation === sessionGeneration) document.getElementById("file-status").textContent = "Could not read the family file. Please try again.";
+    refs.importDataInput.value = "";
+  };
   reader.readAsText(file);
-}
-
-function loadImportedState(importedData) {
-  validateFamilyData(importedData);
-  recordHistory("Import family file");
-  state.people = structuredClone(importedData.people);
-  state.relationships = structuredClone(importedData.relationships);
-
-  normalizeState();
-  cy.elements().remove();
-  cy.add(buildElements());
-  populatePersonSelects();
-  refreshStats();
-  renderPeopleTable();
-  resetPersonForm();
-  clearHighlight();
-
-  const hasSavedPositions = state.people.some((person) => person.position);
-  if (hasSavedPositions) {
-    runLayout(true, false);
-  } else {
-    runLayout(true, true);
-  }
-
-  saveState();
 }
 
 function showTooltip(node, renderedPosition) {
@@ -1173,6 +1178,8 @@ function hideTooltip() {
 }
 
 function populatePersonSelects() {
+  const previousA = refs.personA.value;
+  const previousB = refs.personB.value;
   const options = state.people
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -1181,6 +1188,8 @@ function populatePersonSelects() {
 
   refs.personA.innerHTML = options;
   refs.personB.innerHTML = options;
+  if (state.people.some(person => person.id === previousA)) refs.personA.value = previousA;
+  if (state.people.some(person => person.id === previousB)) refs.personB.value = previousB;
 }
 
 function populateEditPersonSelects() {
@@ -1269,11 +1278,6 @@ function applyMode() {
   }
 
   document.body.classList.add("canvas-only-mode");
-  // Reuse the same search UI in the full-canvas tab, where there is no sidebar.
-  document.querySelector(".canvas-header").append(refs.searchPanel);
-  refs.searchPanel.classList.add("floating-search");
-  refs.searchPanel.hidden = true;
-  refs.findPersonButton.setAttribute("aria-expanded", "false");
 }
 
 function openCanvasOnlyView() {
@@ -1311,24 +1315,68 @@ function updateSidebarToggle(isCollapsed) {
 }
 
 function openPersonSearch() {
-  if (isCanvasOnlyMode) {
-    if (!refs.searchPanel.hidden) {
-      closeFloatingSearch();
-      return;
-    }
-    refs.searchPanel.hidden = false;
-    refs.findPersonButton.setAttribute("aria-expanded", "true");
-  } else if (document.body.classList.contains("sidebar-collapsed")) {
-    toggleSidebar();
+  if (!refs.searchPanel.hidden) {
+    closeFloatingSearch();
+    return;
   }
+  refs.searchPanel.hidden = false;
+  refs.findPersonButton.setAttribute("aria-expanded", "true");
+  positionPersonSearch();
   refs.personSearch.focus();
   refs.personSearch.select();
 }
 
+function positionPersonSearch() {
+  const anchor = refs.findPersonButton.getBoundingClientRect();
+  const panel = refs.searchPanel.getBoundingClientRect();
+  refs.searchPanel.style.left = `${Math.max(12, Math.min(anchor.right - panel.width, innerWidth - panel.width - 12))}px`;
+  refs.searchPanel.style.top = `${Math.max(12, Math.min(anchor.bottom + 8, innerHeight - panel.height - 12))}px`;
+}
+
 function closeFloatingSearch() {
-  if (!isCanvasOnlyMode) return;
   refs.searchPanel.hidden = true;
   refs.findPersonButton.setAttribute("aria-expanded", "false");
+}
+
+async function enterCanvasFullscreen() {
+  if (fullscreenView) return;
+  fullscreenView = refs.tableView.classList.contains("hidden") ? "canvas" : "table";
+  closeFloatingSearch();
+  hideTooltip();
+  hideUndoToast();
+  setActiveView("canvas");
+  document.body.classList.add("canvas-fullscreen");
+  refs.canvasView.setAttribute("tabindex", "-1");
+  refs.canvasView.focus();
+  handleWindowResize();
+  try {
+    await document.documentElement.requestFullscreen?.();
+    // Esc can be pressed while the browser request is still pending.
+    if (!fullscreenView && document.fullscreenElement) await document.exitFullscreen();
+  } catch { /* Keep the same canvas-only layout when native fullscreen is unavailable. */ }
+  handleWindowResize();
+}
+
+function restoreFullscreenView() {
+  if (!fullscreenView) return;
+  const previousView = fullscreenView;
+  fullscreenView = null;
+  nativeFullscreenEntered = false;
+  document.body.classList.remove("canvas-fullscreen");
+  refs.canvasView.removeAttribute("tabindex");
+  setActiveView(previousView);
+  requestAnimationFrame(handleWindowResize);
+  document.getElementById("fullscreen-button").focus({ preventScroll: true });
+}
+
+async function exitCanvasFullscreen() {
+  if (!fullscreenView) return;
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+  } catch { /* Still restore the app layout if the browser already exited. */ }
+  finally {
+    restoreFullscreenView();
+  }
 }
 
 function attachContainedBoxSelection() {
@@ -1369,6 +1417,7 @@ function handleWindowResize() {
 
   cy.resize();
   cy.fit(undefined, getFitPadding());
+  if (!refs.searchPanel.hidden) positionPersonSearch();
 }
 
 function setCanvasTool(tool) {
@@ -1408,6 +1457,8 @@ function startEditingPerson(personId) {
     return;
   }
 
+  document.body.classList.remove("canvas-only-mode");
+  requestAnimationFrame(handleWindowResize);
   if (document.body.classList.contains("sidebar-collapsed")) {
     toggleSidebar();
   }
@@ -1419,6 +1470,7 @@ function startEditingPerson(personId) {
   document.getElementById("deceased").checked = !!(person.deceased || person.dateOfDeath);
   document.getElementById("person-notes").value = person.notes || "";
   refs.personSubmit.textContent = "Save Changes";
+  document.getElementById("person-form-title").textContent = "Edit Person";
   refs.personCancel.classList.remove("hidden-button");
   refs.personForm.scrollIntoView({ behavior: "smooth", block: "start" });
   document.getElementById("name").focus({ preventScroll: true });
@@ -1430,6 +1482,7 @@ function resetPersonForm() {
   refs.personForm.reset();
   document.getElementById("gender").value = "male";
   refs.personSubmit.textContent = "Add Person";
+  document.getElementById("person-form-title").textContent = "Add Person";
   refs.personCancel.classList.add("hidden-button");
 }
 
@@ -1693,8 +1746,9 @@ function renderSearchResults(query) {
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, 12);
   refs.searchResults.innerHTML = matches.length
-    ? matches.map((person) => `<button type="button" class="search-result" role="option" data-person-id="${escapeHtml(person.id)}">${escapeHtml(person.name)}</button>`).join("")
+    ? matches.map((person) => `<button type="button" class="search-result" data-person-id="${escapeHtml(person.id)}">${escapeHtml(person.name)}</button>`).join("")
     : '<p class="search-empty">No matching people.</p>';
+  if (!refs.searchPanel.hidden) positionPersonSearch();
 }
 
 function handleSearchResultClick(event) {
@@ -1730,7 +1784,12 @@ function jumpToPerson(personId) {
 }
 
 function handleHistoryShortcut(event) {
-  if (event.key === "Escape" && isCanvasOnlyMode && !refs.searchPanel.hidden) {
+  if (event.key === "Escape" && fullscreenView) {
+    event.preventDefault();
+    exitCanvasFullscreen();
+    return;
+  }
+  if (event.key === "Escape" && !refs.searchPanel.hidden) {
     closeFloatingSearch();
     refs.findPersonButton.focus();
   }
@@ -1738,7 +1797,7 @@ function handleHistoryShortcut(event) {
   if (!(event.metaKey || event.ctrlKey) || event.altKey) {
     return;
   }
-  if ((event.code === "Backslash" || event.key === "\\") && !event.shiftKey && !isCanvasOnlyMode) {
+  if ((event.code === "Backslash" || event.key === "\\") && !event.shiftKey && !document.body.classList.contains("canvas-only-mode") && !fullscreenView) {
     event.preventDefault();
     if (!event.repeat) toggleSidebar();
     return;
@@ -1870,7 +1929,7 @@ async function startCloudAuth() {
     document.getElementById("retry-save").addEventListener("click", () => cloudStore?.flush().catch(() => {}));
     document.getElementById("retry-load").addEventListener("click", retryAccountLoad);
     document.getElementById("reload-cloud").addEventListener("click", async () => {
-      if (!window.confirm("Discard this tab's unsaved draft and load the latest cloud copy? Export Family File first if you want to keep your draft.")) return;
+      if (!window.confirm("Discard this tab's unsaved draft and load the latest cloud copy? Use Export Tree first if you want to keep your draft.")) return;
       try { sessionStorage.removeItem(cloudStore.key); } catch { /* Retry can still load the cloud. */ }
       await retryAccountLoad();
     });
@@ -1935,6 +1994,10 @@ async function applyAccountSession(session, force = false, requestedTreeId = nul
   const user = session?.user;
   if (!force && user && user.id === activeUserId) return;
   const generation = ++sessionGeneration;
+  exitCanvasFullscreen();
+  closeFloatingSearch();
+  pendingImport = null;
+  document.getElementById("file-status").textContent = "";
   cloudStore?.close();
   cloudStore = null;
   cloudApplying = true;
@@ -2028,8 +2091,10 @@ function renderTreePicker() {
 function openTreeDialog(mode) {
   if (treeChanging || !treeCatalog) return;
   treeDialogMode = mode;
-  document.getElementById("tree-dialog-title").textContent = mode === "create" ? "New Family Tree" : "Rename Family Tree";
-  document.getElementById("tree-name").value = mode === "rename" ? treeList.find(tree => tree.id === activeTreeId)?.name || "" : "";
+  document.getElementById("tree-dialog-title").textContent = mode === "import" ? "Import Family Tree" : mode === "create" ? "New Family Tree" : "Rename Family Tree";
+  document.getElementById("tree-name").value = mode === "import" ? pendingImport.name : mode === "rename" ? treeList.find(tree => tree.id === activeTreeId)?.name || "" : "";
+  document.getElementById("tree-dialog-copy").hidden = mode !== "import";
+  document.getElementById("tree-dialog-copy").textContent = mode === "import" ? `Import ${pendingImport.document.people.length} people into a new tree. Your existing trees will not be changed.` : "";
   document.getElementById("tree-error").textContent = "";
   document.getElementById("tree-dialog").showModal();
   document.getElementById("tree-name").focus();
@@ -2062,6 +2127,7 @@ async function submitTreeForm(event) {
   const catalog = treeCatalog;
   const id = activeTreeId;
   const mode = treeDialogMode;
+  const imported = mode === "import" ? pendingImport : null;
   const name = document.getElementById("tree-name").value;
   treeChanging = true;
   document.getElementById("workspace").inert = true;
@@ -2070,7 +2136,8 @@ async function submitTreeForm(event) {
     catalog.validateName(name);
     await cloudStore.flush();
     if (userId !== activeUserId) return;
-    const result = mode === "create" ? await catalog.create(name) : await catalog.rename(id, name);
+    const result = mode === "import" ? await catalog.create(name, imported.id, imported.document)
+      : mode === "create" ? await catalog.create(name) : await catalog.rename(id, name);
     if (userId !== activeUserId) return;
     if (mode === "rename") {
       treeList = treeList.map(tree => tree.id === id ? result : tree);
@@ -2078,7 +2145,7 @@ async function submitTreeForm(event) {
       renderTreePicker();
     }
     document.getElementById("tree-dialog").close();
-    if (mode === "create") {
+    if (mode !== "rename") {
       const { data, error } = await authClient.auth.getSession();
       if (error) throw error;
       if (data.session?.user.id === userId) await applyAccountSession(data.session, true, result.id);

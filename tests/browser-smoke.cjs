@@ -70,31 +70,54 @@ const server = http.createServer((req, res) => {
     await login('alice@example.test');
     assert.equal(await visible('#undo-toast'), false);
     assert.equal(await visible('#empty-canvas'), true);
-    // Sidebar shortcut works in text inputs, and search remains above scrolling controls.
+    // Search is an on-demand toolbar popover, independent of sidebar visibility.
     await page.locator('#name').focus();
     await page.keyboard.press('Meta+Backslash');
     assert.equal(await visible('#sidebar'), false);
     await page.keyboard.press('Meta+Backslash');
     assert.equal(await visible('#sidebar'), true);
-    const searchTop = (await page.locator('#person-search').boundingBox()).y;
-    await page.locator('.sidebar-content').evaluate(el => { el.scrollTop = el.scrollHeight; });
-    assert.equal((await page.locator('#person-search').boundingBox()).y, searchTop);
+    assert.equal(await visible('#person-search-panel'), false);
+    assert.equal(await page.locator('#sidebar #person-search-panel').count(), 0);
     await page.keyboard.press('Meta+Backslash');
     await page.locator('#find-person-button').click();
-    assert.equal(await visible('#sidebar'), true);
+    assert.equal(await visible('#sidebar'), false);
     assert.equal(await page.locator('#person-search').evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await visible('#person-search-panel'), false);
+    await page.keyboard.press('Meta+Backslash');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('#name').fill('Mobile form access');
     const mobileControls = await page.locator('.sidebar-content').boundingBox();
-    assert.ok(mobileControls.height > 80, 'Pinned search must leave space for mobile editing');
+    assert.ok(mobileControls.height > 80, 'Mobile editing controls must remain usable');
     const accountBar = await page.locator('.account-bar').boundingBox();
     assert.ok((await page.locator('#sidebar').boundingBox()).y >= accountBar.y + accountBar.height, 'Mobile account controls must not overlap the sidebar');
     await page.screenshot({ path: '/tmp/family-tree-mobile-ui.png' });
+    await page.locator('#find-person-button').click();
+    const mobileSearch = await page.locator('#person-search-panel').boundingBox();
+    assert.ok(mobileSearch.x >= 0 && mobileSearch.x + mobileSearch.width <= 390);
+    await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.locator('#name').fill('Alice Relative');
     await page.locator('#person-submit').click();
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
     assert.equal(rows.get(users['alice@example.test'].id).document.people[0].name, 'Alice Relative');
+    async function clickMember(name, target = page) {
+      const point = await target.evaluate(name => {
+        const node = cy.nodes().filter(n => n.data('label') === name);
+        const rect = document.querySelector('#cy').getBoundingClientRect();
+        return { x: rect.x + node.renderedPosition().x, y: rect.y + node.renderedPosition().y };
+      }, name);
+      await target.mouse.click(point.x, point.y);
+    }
+    await page.locator('#pan-mode').click();
+    await page.locator('#sidebar-toggle-button').click();
+    await page.waitForTimeout(500);
+    await clickMember('Alice Relative');
+    await page.waitForFunction(() => document.querySelector('#person-submit').textContent === 'Save Changes');
+    assert.equal(await visible('#sidebar'), true);
+    assert.equal(await page.locator('#name').inputValue(), 'Alice Relative');
+    await page.locator('#person-cancel').click();
+    await page.locator('#selection-mode').click();
     await page.locator('#table-tab').click();
     await page.locator('#sidebar-toggle-button').click();
     await page.getByRole('button', { name: 'Edit Alice Relative', exact: true }).click();
@@ -138,6 +161,8 @@ const server = http.createServer((req, res) => {
     await page.locator('#person-a').selectOption({ label: 'Father' });
     await page.locator('#person-b').selectOption({ label: 'Daughter' });
     await page.locator('#relationship-form button[type=submit]').click();
+    assert.equal(await page.locator('#person-a option:checked').textContent(), 'Father');
+    assert.equal(await page.locator('#person-b option:checked').textContent(), 'Daughter');
     await page.getByRole('button', { name: 'Collapse descendants of Father', exact: true }).click();
     await page.waitForFunction(() => cy.nodes(':visible').length === 2);
     assert.equal(await page.evaluate(() => cy.nodes(':visible').length), 2);
@@ -153,10 +178,19 @@ const server = http.createServer((req, res) => {
     await page.getByRole('button', { name: 'Edit Father', exact: true }).click();
     assert.equal(await page.locator('#person-notes').inputValue(), 'Teacher; born in Chennai');
     assert.equal(await page.locator('#deceased').isChecked(), true);
+    await page.locator('#find-person-button').click();
     await page.locator('#person-search').fill('Daughter');
     await page.locator('#search-results button').click();
     await page.waitForFunction(() => cy.nodes(':visible').length === 3);
     assert.equal(await page.evaluate(() => cy.nodes(':visible').length), 3);
+    await page.waitForTimeout(500);
+    // A selected member must not turn branch controls into highlighted badges.
+    const control = page.getByRole('button', { name: 'Collapse descendants of Father', exact: true });
+    assert.equal(await control.evaluate(el => getComputedStyle(el).boxShadow), 'none');
+    assert.equal(await control.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 250, 241)');
+    await page.evaluate(() => highlightNeighborhood(state.people.find(p => p.name === 'Daughter').id));
+    await page.waitForFunction(() => Number(document.querySelector(`[data-parent-id="${state.people.find(p => p.name === 'Alice Relative').id}"]`).style.opacity) < 0.2);
+    await page.evaluate(() => clearHighlight());
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
     const originalTree = await page.locator('#tree-select').inputValue();
     await page.locator('#new-tree').click();
@@ -179,6 +213,31 @@ const server = http.createServer((req, res) => {
     await page.waitForTimeout(500);
     await page.screenshot({ path: '/tmp/family-tree-desktop-ui.png' });
     await page.locator('#person-search').fill('');
+    await page.keyboard.press('Escape');
+    // Fullscreen hides all chrome and restores the previous view on Esc.
+    for (const fallback of [false, true]) {
+      await page.locator('#table-tab').click();
+      if (fallback) await page.evaluate(() => {
+        window.originalFullscreen = document.documentElement.requestFullscreen;
+        document.documentElement.requestFullscreen = () => Promise.reject(new Error('Test unavailable browser API'));
+      });
+      await page.locator('#fullscreen-button').click();
+      await page.waitForTimeout(300);
+      if (!fallback) assert.equal(await page.evaluate(() => !!document.fullscreenElement), true, 'Native fullscreen should be entered');
+      assert.equal(await page.evaluate(() => document.body.classList.contains('canvas-fullscreen')), true);
+      assert.equal(await visible('.account-bar'), false);
+      assert.equal(await visible('.canvas-header'), false);
+      assert.equal(await visible('#sidebar'), false);
+      const full = await page.locator('#cy').boundingBox();
+      const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+      assert.equal(full.x, 0); assert.equal(full.y, 0);
+      assert.equal(full.width, viewport.width); assert.equal(full.height, viewport.height);
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.body.classList.contains('canvas-fullscreen'));
+      assert.equal(await visible('#table-view'), true);
+      assert.equal(await visible('#sidebar'), true);
+      if (fallback) await page.evaluate(() => { document.documentElement.requestFullscreen = window.originalFullscreen; });
+    }
     // Exercise actual pointer box selection and native group drag, not synthetic graph events.
     await page.locator('#canvas-tab').click();
     await page.locator('#sidebar-toggle-button').click();
@@ -239,6 +298,44 @@ const server = http.createServer((req, res) => {
     assert.ok(deltas[0].x > 1 && deltas[0].y > 1);
     deltas.forEach(delta => { assert.ok(Math.abs(delta.x - deltas[0].x) < 0.01); assert.ok(Math.abs(delta.y - deltas[0].y) < 0.01); });
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
+    // Export the selected tree, then import it as a separate named tree.
+    const downloaded = page.waitForEvent('download');
+    await page.locator('#export-data-button').click();
+    const download = await downloaded;
+    assert.equal(download.suggestedFilename(), 'My Family Tree.familygraph.json');
+    const stream = await download.createReadStream();
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    const buffer = Buffer.concat(chunks), exported = JSON.parse(buffer.toString());
+    const originalDocument = structuredClone(rows.get(originalTree).document);
+    assert.equal(exported.data.people.length, 3);
+    const originalCount = rows.size;
+    await page.locator('#import-data-input').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{"people": []}') });
+    await page.waitForFunction(() => document.querySelector('#file-status').textContent.includes('Invalid'));
+    assert.equal(rows.size, originalCount);
+    await page.locator('#import-data-input').setInputFiles({ name: 'invalid-person.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ people: [{ id: 'bad' }], relationships: [] })) });
+    await page.waitForFunction(() => document.querySelector('#file-status').textContent.includes('Invalid person'));
+    assert.equal(rows.size, originalCount);
+    await page.locator('#import-data-input').setInputFiles({ name: download.suggestedFilename(), mimeType: 'application/json', buffer });
+    await page.locator('#tree-dialog').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#tree-name').inputValue(), 'My Family Tree');
+    await page.locator('#cancel-tree').click();
+    assert.equal(rows.size, originalCount);
+    await page.locator('#import-data-input').setInputFiles({ name: download.suggestedFilename(), mimeType: 'application/json', buffer });
+    await page.locator('#tree-dialog').waitFor({ state: 'visible' });
+    await page.locator('#tree-name').fill('Imported backup');
+    await page.locator('#save-tree').click();
+    await page.waitForFunction(() => !document.querySelector('#workspace').hidden && document.querySelector('#tree-select').selectedOptions[0]?.textContent === 'Imported backup');
+    const importedId = await page.locator('#tree-select').inputValue();
+    assert.notEqual(importedId, originalTree);
+    assert.deepEqual(rows.get(importedId).document.people, exported.data.people);
+    assert.deepEqual(rows.get(importedId).document.relationships, exported.data.relationships);
+    assert.deepEqual(rows.get(originalTree).document, originalDocument);
+    await page.reload();
+    await page.locator('#workspace').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#tree-select').inputValue(), importedId);
+    await page.locator('#tree-select').selectOption(originalTree);
+    await page.waitForFunction(id => !document.querySelector('#workspace').hidden && document.querySelector('#tree-select').value === id, originalTree);
     // Search is also accessible in the dedicated canvas-only tab.
     const canvasPage = await context.newPage();
     await canvasPage.goto(`http://127.0.0.1:${server.address().port}/?view=canvas`);
@@ -250,6 +347,14 @@ const server = http.createServer((req, res) => {
     await canvasPage.locator('#find-person-button').click();
     await canvasPage.keyboard.press('Escape');
     assert.equal(await canvasPage.locator('#person-search-panel').isVisible(), false);
+    await canvasPage.locator('#pan-mode').click();
+    await canvasPage.locator('#fullscreen-button').click();
+    await canvasPage.waitForTimeout(500);
+    await clickMember('Father', canvasPage);
+    await canvasPage.waitForFunction(() => document.querySelector('#person-submit').textContent === 'Save Changes');
+    assert.equal(await canvasPage.locator('#sidebar').isVisible(), true);
+    assert.equal(await canvasPage.locator('#name').inputValue(), 'Father');
+    assert.equal(await canvasPage.evaluate(() => document.body.classList.contains('canvas-fullscreen')), false);
     await canvasPage.close();
     missingTable = true;
     await page.reload();
@@ -257,6 +362,6 @@ const server = http.createServer((req, res) => {
     assert.equal(await visible('#workspace'), false);
     assert.equal(rows.get(users['alice@example.test'].id).document.people.length, 3);
     assert.deepEqual(errors, []);
-    console.log('PASS: sidebar shortcut, persistent and full-canvas search, subtle deceased marker, full-icon box selection at multiple zoom levels/directions, group movement, named trees, auth/cloud isolation, Undo, spacing, notes, and branch collapse/search');
+    console.log('PASS: toolbar search, Pan-to-edit, relationship choices, neutral generation controls, native/fallback fullscreen, export/import round trip and safe cancellation, plus selection/group movement, named trees, auth isolation, Undo, notes, and branch search');
   } finally { await browser.close(); server.close(); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

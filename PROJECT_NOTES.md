@@ -4,7 +4,10 @@
 
 - New nodes get collision-free positions near visible members; existing positions remain unchanged.
 - Gender is shown with both shape and color. A deceased flag or death date adds a subtle 1px dashed border, without a symbol beside the name.
-- Cmd/Ctrl + Backslash toggles the sidebar, including from form fields (except while a dialog is open). Search stays above the independently scrolling sidebar controls; the toolbar lens reveals/focuses it, or opens a popover in canvas-only mode.
+- Cmd/Ctrl + Backslash toggles the sidebar, including from form fields (except while a dialog is open). Search is now exclusively an on-demand toolbar popover in both normal and canvas-only views; it does not open the sidebar.
+- Export Tree and Import Tree are in the account bar. Imports validate the supported JSON format and use the tree-name dialog to atomically create a new document; they never overwrite the current tree. Export excludes the recycle bin.
+- Pan-mode node taps open the editor, revealing the sidebar even from the separate canvas tab. Node dragging remains native. Relationship form values survive submission and dropdown refreshes.
+- Fullscreen uses a canvas-only CSS layout with optional native browser fullscreen. Esc restores the previous canvas/table view; Pan-to-edit exits fullscreen. Generation buttons have neutral 1px borders, no shadow/yellow highlight, and follow their nodes' fade opacity.
 - Person records support optional `notes`, `deceased`, and `descendantsCollapsed` fields in the existing JSON cloud document; no database migration is needed.
 - Per-parent −/+ canvas buttons hide descendants via parent links, preserving nested collapse preferences. Search reveals hidden results; Expand All Generations clears all branch folds.
 

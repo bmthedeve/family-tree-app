@@ -19,6 +19,7 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Keep editable notes/metadata for each member
 - Collapse or expand a parent's descendants using its −/+ button; expand every branch from the sidebar
 - Search for a person by name and jump directly to their highlighted graph node
+- Open on-demand search from the magnifying glass beside Select/Pan; no sidebar space is reserved for search
 - Record, edit, and delete parent, child, spouse, and sibling relationships
 - Track current/former spouse status and relationship start/end dates
 - Prevent duplicate, self-referential, and circular ancestor relationships
@@ -27,8 +28,9 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Highlight a person's immediate family by selecting their node
 - Switch between graph and table views
 - Collapse the sidebar for a full-width canvas and restore it when needed
+- Enter fullscreen to hide all app controls and show only the canvas; press Esc to return
 - Export the graph as a PNG image
-- Export and import an editable `.familygraph.json` file
+- Export the selected tree and import an editable `.familygraph.json` file as a separate named tree without replacing existing trees
 - Save family data, node positions, and recycle bin to Supabase; remember sidebar preferences in the browser
 - Undo and redo up to 50 data changes with keyboard shortcuts
 - Review relationship impact before deleting a person
@@ -53,18 +55,22 @@ The Supabase client, Cytoscape.js library, and Manrope font load from public CDN
 
 ## Using the app
 
-The account bar contains a **Family tree** picker, **New Tree**, and **Rename**. Existing trees are preserved as **My Family Tree** after applying the [named-tree migration](supabase/migrations/202609240001_named_family_trees.sql). Each tree has its own people, relationships, recycle bin, recovery draft, and save revision. Switching waits for pending saves and clears the previous tree's undo history. Family-file exports use the tree's name; imports replace only the currently selected tree.
+The account bar contains a **Family tree** picker, **New Tree**, **Rename**, **Export Tree**, and **Import Tree**. Existing trees are preserved as **My Family Tree** after applying the [named-tree migration](supabase/migrations/202609240001_named_family_trees.sql). Each tree has its own people, relationships, recycle bin, recovery draft, and save revision. Switching waits for pending saves and clears the previous tree's undo history.
+
+Choose a tree and click **Export Tree** to download its `.familygraph.json` file, including its name, people, metadata, relationships, positions, and collapsed-generation settings (not its recycle bin). **Import Tree** accepts these files and legacy JSON files containing `people` and `relationships`. Confirm or change the name in the import dialog to create a separate private tree; existing trees are never replaced. Invalid files are rejected before creating a tree. GEDCOM and files from other genealogy tools are not currently supported.
 
 **Select** is the default canvas tool: drag on empty canvas to box-select members, then drag any selected member to move the group while keeping its arrangement. An icon must be completely enclosed by the rectangle; partial overlaps and labels do not count. Use **Pan** to drag the background instead. <kbd>Shift</kbd> + drag selects a group in either mode. Only visible members can be selected. Member positions are saved when you release the group.
 
+In **Pan** mode, click a member to open the sidebar directly in edit mode. Dragging a member still moves it without opening the form. The **Fullscreen** button hides the account bar, sidebar, and canvas toolbar. Press <kbd>Esc</kbd> to restore the previous view, or click a member in Pan mode to leave fullscreen and edit. When native browser fullscreen is unavailable, the same distraction-free layout fills the browser viewport. The separate canvas-tab button remains available as well.
+
 1. Add people from the sidebar.
-2. **Find Person** stays pinned at the top of the sidebar while its other controls scroll. The magnifying-glass button beside Select/Pan opens and focuses search, even with the sidebar closed; it opens a search popover in the separate canvas-only tab. Choose a result to center and highlight that person.
-3. Choose two people and define their relationship. Spouse relationships can include status and dates.
+2. Click the magnifying glass beside Select/Pan to open **Find Person**, even with the sidebar closed. Choose a result to center and highlight that person. The popover closes after choosing a result, clicking outside, or pressing Esc.
+3. Choose two people and define their relationship. Person A, Person B, and relationship details remain selected after adding the relationship. Spouse relationships can include status and dates.
 4. Select a graph edge or use **Manage Relationships** to edit or delete a connection.
 5. Drag nodes to organize the graph, scroll to zoom, or drag the background to pan.
 6. Use the sidebar button or <kbd>Cmd/Ctrl</kbd> + <kbd>\\</kbd> to toggle between editing controls and a full-width canvas. The shortcut also works while typing in a form, but not while a dialog is open.
 7. Use **Re-run Layout** to automatically arrange the family network.
-8. Use **Export Family File** to create an editable backup that can later be restored with **Import Family File**.
+8. Use **Export Tree** to create an editable backup that can later be restored as a new tree with **Import Tree**.
 
 Use the on-screen controls or <kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> to undo and <kbd>Ctrl/Cmd</kbd> + <kbd>Y</kbd> (or <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>) to redo. Deleted people remain available in the Recycle Bin until they are permanently removed.
 

@@ -136,11 +136,11 @@
         if (data.length < 1000) return trees;
       }
     }
-    async create(name, id = crypto.randomUUID()) {
+    async create(name, id = crypto.randomUUID(), document = { people: [], relationships: [], recycleBin: [] }) {
       name = this.validateName(name);
       const { error } = await this.client.from("family_tree_documents").insert({
         id, owner_id: this.userId, name, revision: 1,
-        document: { people: [], relationships: [], recycleBin: [] }
+        document
       });
       if (error) throw error;
       return { id, name };

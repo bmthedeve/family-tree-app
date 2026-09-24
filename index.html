@@ -38,6 +38,10 @@
       <label class="tree-picker"><span>Family tree</span><select id="tree-select" aria-label="Family tree"></select></label>
       <button id="new-tree" type="button" class="secondary-button">New Tree</button>
       <button id="rename-tree" type="button" class="secondary-button">Rename</button>
+      <button id="export-data-button" type="button" class="secondary-button" title="Download the selected tree as an editable family file">Export Tree</button>
+      <button id="import-data-button" type="button" class="secondary-button" title="Import a family file as a new tree">Import Tree</button>
+      <input id="import-data-input" type="file" accept=".json,application/json" hidden />
+      <span id="file-status" role="status" aria-live="polite"></span>
       <span id="sync-status" role="status" aria-live="polite"></span>
       <button id="retry-save" type="button" class="secondary-button" hidden>Retry save</button>
       <button id="reload-cloud" type="button" class="secondary-button" hidden>Reload cloud copy</button>
@@ -45,15 +49,6 @@
     </div>
     <div class="app-shell">
       <aside id="sidebar" class="panel">
-        <section id="person-search-panel" class="card search-card">
-          <h2>Find Person</h2>
-          <label>
-            <span>Search by name</span>
-            <input type="search" id="person-search" placeholder="Start typing a name" autocomplete="off" />
-          </label>
-          <div id="search-results" class="search-results" role="listbox" aria-label="Matching people"></div>
-        </section>
-
         <div class="sidebar-content">
         <div class="panel-header">
           <p class="eyebrow">Family Graph</p>
@@ -64,7 +59,7 @@
         </div>
 
         <section class="card">
-          <h2>Add Person</h2>
+          <h2 id="person-form-title">Add Person</h2>
           <form id="person-form" class="form-grid">
             <label>
               <span>Name</span>
@@ -148,9 +143,6 @@
             <button id="expand-generations" type="button" class="secondary-button">Expand All Generations</button>
             <button id="reset-view-button" type="button" class="secondary-button">Reset View</button>
             <button id="export-button" type="button" class="secondary-button">Export PNG</button>
-            <button id="export-data-button" type="button" class="secondary-button">Export Family File</button>
-            <button id="import-data-button" type="button" class="secondary-button">Import Family File</button>
-            <input id="import-data-input" type="file" accept=".familygraph.json,application/json" hidden />
           </div>
           <div id="stats" class="stats"></div>
         </section>
@@ -181,9 +173,16 @@
           <div class="canvas-tools">
             <button id="selection-mode" type="button" class="secondary-button" aria-pressed="true">Select</button>
             <button id="pan-mode" type="button" class="secondary-button" aria-pressed="false">Pan</button>
-            <button id="find-person-button" type="button" class="secondary-button search-toggle" aria-label="Find Person" aria-controls="person-search-panel" title="Find Person">
+            <div class="search-tool">
+            <button id="find-person-button" type="button" class="secondary-button search-toggle" aria-label="Find Person" aria-controls="person-search-panel" aria-expanded="false" title="Find Person">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
             </button>
+            <section id="person-search-panel" class="card floating-search" aria-label="Find Person" hidden>
+              <h2>Find Person</h2>
+              <label><span>Search by name</span><input type="search" id="person-search" placeholder="Start typing a name" autocomplete="off" /></label>
+              <div id="search-results" class="search-results" aria-label="Matching people"></div>
+            </section>
+            </div>
             <span id="selection-count" role="status" aria-live="polite">0 selected</span>
             <button
               id="sidebar-toggle-button"
@@ -207,6 +206,9 @@
                 <path d="M10 14 19 5"></path>
                 <path d="M19 14v5h-14v-14h5"></path>
               </svg>
+            </button>
+            <button id="fullscreen-button" type="button" class="secondary-button search-toggle" aria-label="Enter fullscreen" title="Fullscreen canvas (Esc to exit)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"></path></svg>
             </button>
             <div class="view-switch" role="tablist" aria-label="View switcher">
               <button id="canvas-tab" type="button" class="view-tab active" aria-selected="true">Canvas</button>
@@ -272,6 +274,7 @@
     <dialog id="tree-dialog" class="app-dialog" aria-labelledby="tree-dialog-title">
       <form id="tree-form" class="dialog-card">
         <h2 id="tree-dialog-title">New Family Tree</h2>
+        <p id="tree-dialog-copy" class="dialog-copy" hidden></p>
         <label><span>Tree name</span><input id="tree-name" required maxlength="120" autocomplete="off" /></label>
         <p id="tree-error" role="alert"></p>
         <div class="dialog-actions">
