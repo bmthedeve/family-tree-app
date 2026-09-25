@@ -420,6 +420,9 @@ function relationshipColor(type) {
 
 function attachEvents() {
   attachContainedBoxSelection();
+  // Cytoscape 3.29 gates wheel zoom on userPanningEnabled, which Select disables.
+  // Capture above its container so both modes share one zoom path, not two.
+  refs.canvasView.addEventListener("wheel", handleCanvasWheel, { capture: true, passive: false });
   document.getElementById("zoom-in").addEventListener("click", () => zoomCanvas(cy.zoom() * 1.2));
   document.getElementById("zoom-out").addEventListener("click", () => zoomCanvas(cy.zoom() / 1.2));
   document.getElementById("zoom-level").addEventListener("click", () => zoomCanvas(1));
@@ -1486,9 +1489,27 @@ function setCanvasTool(tool) {
   refs.canvasView.classList.toggle("select-mode", selecting);
 }
 
-function zoomCanvas(level) {
+function handleCanvasWheel(event) {
+  if (cloudApplying || !activeUserId || refs.canvasView.classList.contains("hidden")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  // Do not change the coordinate system during a node drag or selection gesture.
+  if (event.buttons) return;
+  const rect = cy.container().getBoundingClientRect();
+  const unit = event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? rect.height : 1;
+  const delta = event.deltaY * unit;
+  if (!Number.isFinite(delta) || delta === 0 || !rect.width || !rect.height) return;
+  const exponent = Math.max(-1, Math.min(1, -delta * 0.18 / 250));
+  zoomCanvas(cy.zoom() * Math.pow(10, exponent), {
+    x: (event.clientX - rect.left) * cy.width() / rect.width,
+    y: (event.clientY - rect.top) * cy.height() / rect.height
+  });
+}
+
+function zoomCanvas(level, renderedPosition = { x: cy.width() / 2, y: cy.height() / 2 }) {
+  clearTimeout(searchJumpTimer);
   cy.stop(true);
-  cy.zoom({ level: Math.max(cy.minZoom(), Math.min(cy.maxZoom(), level)), renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
+  cy.zoom({ level: Math.max(cy.minZoom(), Math.min(cy.maxZoom(), level)), renderedPosition });
 }
 
 function fitVisibleTree() {

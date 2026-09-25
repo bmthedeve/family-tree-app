@@ -233,6 +233,59 @@ const server = http.createServer((req, res) => {
     assert.ok(Math.abs(worldCenterBefore.x - worldCenterAfter.x) < 0.01 && Math.abs(worldCenterBefore.y - worldCenterAfter.y) < 0.01);
     await page.locator('#zoom-out').click();
     assert.equal(await page.locator('#zoom-level').textContent(), '100%');
+    // Real browser wheel input must zoom once, under the pointer, in either tool.
+    for (const tool of ['selection', 'pan']) {
+      await page.locator(`#${tool}-mode`).click();
+      for (const modifier of ['', 'Meta', 'Control']) {
+        await page.evaluate(() => { cy.stop(true); cy.zoom(1); cy.pan({ x: 100, y: 100 }); });
+        const anchor = await page.evaluate(() => {
+          const rect = cy.container().getBoundingClientRect();
+          // Browser wheel coordinates use integer CSS pixels; account for fractional layout bounds.
+          const client = { x: Math.round(rect.left + rect.width * 0.65), y: Math.round(rect.top + rect.height * 0.45) };
+          const rendered = { x: (client.x - rect.left) * cy.width() / rect.width, y: (client.y - rect.top) * cy.height() / rect.height };
+          return { client, rendered,
+            model: { x: (rendered.x - cy.pan().x) / cy.zoom(), y: (rendered.y - cy.pan().y) / cy.zoom() } };
+        });
+        await page.mouse.move(anchor.client.x, anchor.client.y);
+        if (modifier) await page.keyboard.down(modifier);
+        await page.mouse.wheel(0, -120);
+        await page.waitForFunction(() => cy.zoom() > 1);
+        const zoomed = await page.evaluate(anchor => ({ zoom: cy.zoom(), panning: cy.userPanningEnabled(), pageScale: visualViewport.scale,
+          model: { x: (anchor.rendered.x - cy.pan().x) / cy.zoom(), y: (anchor.rendered.y - cy.pan().y) / cy.zoom() } }), anchor);
+        assert.ok(Math.abs(zoomed.zoom - Math.pow(10, 120 * 0.18 / 250)) < 0.0001, 'Wheel zoom must not run twice');
+        assert.ok(Math.abs(zoomed.model.x - anchor.model.x) < 0.01 && Math.abs(zoomed.model.y - anchor.model.y) < 0.01);
+        assert.equal(zoomed.panning, tool === 'pan');
+        assert.equal(zoomed.pageScale, 1);
+        assert.equal(await page.locator('#zoom-level').textContent(), `${Math.round(zoomed.zoom * 100)}%`);
+        await page.mouse.wheel(0, 120);
+        await page.waitForFunction(() => Math.abs(cy.zoom() - 1) < 0.0001);
+        if (modifier) await page.keyboard.up(modifier);
+      }
+      // Fine trackpad deltas and line/page wheel units share the same normalized path.
+      for (const deltaMode of [0, 1, 2]) {
+        const result = await page.evaluate(deltaMode => {
+          cy.zoom(1);
+          const rect = cy.container().getBoundingClientRect();
+          const unit = deltaMode === 1 ? 33 : deltaMode === 2 ? rect.height : 1;
+          const count = deltaMode === 0 ? 10 : 1;
+          let prevented = true;
+          for (let i = 0; i < count; i++) {
+            prevented = !cy.container().dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true,
+              deltaMode, deltaY: -2 / unit, clientX: rect.left + 50, clientY: rect.top + 50 })) && prevented;
+          }
+          return { prevented, zoom: cy.zoom(), expected: Math.pow(10, 2 * count * 0.18 / 250) };
+        }, deltaMode);
+        assert.equal(result.prevented, true);
+        assert.ok(Math.abs(result.zoom - result.expected) < 0.0001);
+      }
+    }
+    await page.locator('#selection-mode').click();
+    assert.equal(await page.evaluate(() => {
+      const before = cy.zoom();
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -100, metaKey: true });
+      document.querySelector('#sidebar').dispatchEvent(event);
+      return !event.defaultPrevented && cy.zoom() === before;
+    }), true, 'Scrolling outside the canvas must remain untouched');
     await page.evaluate(() => { cy.zoom(cy.minZoom()); });
     assert.equal(await page.locator('#zoom-out').isDisabled(), true);
     await page.evaluate(() => { cy.zoom(cy.maxZoom()); });

@@ -2,6 +2,7 @@
 
 ## Current cloud architecture (September 2026)
 
+- Canvas wheel input is handled by a non-passive capture listener above Cytoscape's container: Select disables user panning, which otherwise also disables native wheel zoom in Cytoscape 3.29.2. Trackpad scrolling and Cmd/Ctrl + wheel zoom around the pointer in either mode; pixel/line/page deltas are normalized and zoom remains clamped to 20–300%. Wheel input outside the canvas is untouched.
 - Generation controls use 18px model-space buttons scaled by Cytoscape zoom, including their border and symbol; they do not stay fixed-size over zoomed-out nodes.
 - The canvas control strip contains zoom out/in, click-to-reset percentage, Fit Tree (visible elements only), and Arrange. Alignment/spacing uses `canvas-layout.js`, touches only visible selected nodes, and creates one undo snapshot per operation. Spacing has a minimum 24-unit gap.
 - Single-member selection and the sidebar editor expose quick Parent/Child/Spouse actions. The form stores a temporary relative context; save creates the person/relationship atomically and unfolds hidden ancestors, with a single history entry. Cancel and invalid input do not change the tree.

@@ -68,6 +68,8 @@ In **Pan** mode, click a member to open the sidebar directly in edit mode. Dragg
 
 The canvas control strip provides **− / +** zoom buttons, the current zoom percentage (click it for 100%), and **Fit Tree** to frame all visible members without changing their positions. Generation −/+ buttons scale with the diagram, including at low zoom levels.
 
+In either **Select** or **Pan** mode, use a two-finger up/down trackpad scroll or **Cmd + mouse-wheel scroll** over the canvas to zoom around the pointer. Ordinary mouse-wheel scrolling and Ctrl + scroll also work. Canvas scrolling changes the diagram zoom, not the browser page zoom; scrolling outside the canvas behaves normally. Zoom pauses while a mouse button is held for dragging or box selection.
+
 Select at least two members and open **Arrange** for left/right/top/bottom alignment or horizontal/vertical centering. Select three or more for equal edge-to-edge spacing. Spacing keeps at least 24 diagram units between icons; crowded selections expand to make room. Only selected visible members move, positions save to the active tree, and each arrangement can be undone in one step.
 
 Select one member to reveal **+ Parent**, **+ Child**, and **+ Spouse** beside their name in the canvas controls. These actions also appear above the sidebar editor when editing a person. Fill in the new relative's details and save to create both the member and their relationship as one undoable change. Cancel makes no changes. Parents start above, children below, and spouses beside the chosen member where space allows; occupied positions are avoided. Hidden ancestor branches open so the new relative can be seen. Spouses start with current status; edit the relationship to add dates or change status.
