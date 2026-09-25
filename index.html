@@ -34,23 +34,39 @@
     </section>
     <div id="workspace" hidden>
     <div class="account-bar">
-      <span id="account-email"></span>
       <label class="tree-picker"><span>Family tree</span><select id="tree-select" aria-label="Family tree"></select></label>
+      <div class="header-menu">
+      <button id="tree-menu-toggle" type="button" class="secondary-button" aria-expanded="false" aria-controls="tree-menu">Tree ▾</button>
+      <div id="tree-menu" class="header-popover" role="group" aria-label="Tree actions" hidden>
       <button id="new-tree" type="button" class="secondary-button">New Tree</button>
       <button id="rename-tree" type="button" class="secondary-button">Rename</button>
       <button id="export-data-button" type="button" class="secondary-button" title="Download the selected tree as an editable family file">Export Tree</button>
       <button id="import-data-button" type="button" class="secondary-button" title="Import a family file as a new tree">Import Tree</button>
+      </div>
+      </div>
       <input id="import-data-input" type="file" accept=".json,application/json" hidden />
       <span id="file-status" role="status" aria-live="polite"></span>
       <span id="sync-status" role="status" aria-live="polite"></span>
       <button id="retry-save" type="button" class="secondary-button" hidden>Retry save</button>
       <button id="reload-cloud" type="button" class="secondary-button" hidden>Reload cloud copy</button>
-      <button id="sign-out" type="button" class="secondary-button">Sign out</button>
+      <div class="header-menu">
+        <button id="account-menu-toggle" type="button" class="secondary-button" aria-expanded="false" aria-controls="account-menu">Account ▾</button>
+        <div id="account-menu" class="header-popover account-popover" role="group" aria-label="Account" hidden>
+          <span id="account-email"></span>
+          <button id="sign-out" type="button" class="secondary-button">Sign out</button>
+        </div>
+      </div>
     </div>
     <div class="app-shell">
       <aside id="sidebar" class="panel">
+        <div class="sidebar-tabs" role="tablist" aria-label="Editing controls">
+          <button id="sidebar-member-tab" type="button" role="tab" aria-selected="true" aria-controls="sidebar-member" data-sidebar-tab="member">Member</button>
+          <button id="sidebar-relationships-tab" type="button" role="tab" aria-selected="false" aria-controls="sidebar-relationships" tabindex="-1" data-sidebar-tab="relationships">Relationships</button>
+          <button id="sidebar-tools-tab" type="button" role="tab" aria-selected="false" aria-controls="sidebar-tools" tabindex="-1" data-sidebar-tab="tools">Tools</button>
+        </div>
         <div class="sidebar-content">
-        <div class="panel-header">
+        <section id="sidebar-member" class="card" role="tabpanel" aria-labelledby="sidebar-member-tab">
+        <div id="sidebar-intro" class="panel-header">
           <p class="eyebrow">Family Graph</p>
           <h1>Relationship Explorer</h1>
           <p class="panel-copy">
@@ -58,7 +74,6 @@
           </p>
         </div>
 
-        <section class="card">
           <h2 id="person-form-title">Add Person</h2>
           <div id="editor-relative-actions" class="relative-actions" aria-label="Add a relative" hidden>
             <button type="button" class="secondary-button" data-quick-add="parent">+ Parent</button>
@@ -95,7 +110,7 @@
           </form>
         </section>
 
-        <section class="card">
+        <section id="sidebar-relationships" class="card" role="tabpanel" aria-labelledby="sidebar-relationships-tab" hidden>
           <h2>Add Relationship</h2>
           <form id="relationship-form" class="form-grid">
             <label>
@@ -134,8 +149,10 @@
             </div>
             <button type="submit" class="primary-button">Add Relationship</button>
           </form>
+          <button id="manage-relationships-button" type="button" class="secondary-button">Manage Relationships</button>
         </section>
 
+        <div id="sidebar-tools" role="tabpanel" aria-labelledby="sidebar-tools-tab" hidden>
         <section class="card actions-card">
           <h2>Graph Actions</h2>
           <div class="action-list">
@@ -143,9 +160,10 @@
               <button id="undo-button" type="button" class="secondary-button" disabled>Undo</button>
               <button id="redo-button" type="button" class="secondary-button" disabled>Redo</button>
             </div>
-            <button id="manage-relationships-button" type="button" class="secondary-button">Manage Relationships</button>
             <button id="recycle-bin-button" type="button" class="secondary-button">Recycle Bin <span id="recycle-count"></span></button>
-            <button id="layout-button" type="button" class="secondary-button">Re-run Layout</button>
+            <button id="generation-layout-button" type="button" class="secondary-button">Generation Layout</button>
+            <button id="layout-button" type="button" class="secondary-button">Free-form Layout</button>
+            <p class="panel-copy">Layouts move members. You can undo a layout or drag members to adjust it.</p>
             <button id="expand-generations" type="button" class="secondary-button">Expand All Generations</button>
             <button id="reset-view-button" type="button" class="secondary-button">Reset View</button>
             <button id="export-button" type="button" class="secondary-button">Export PNG</button>
@@ -166,16 +184,13 @@
           </div>
         </section>
 
+        </div>
         <div id="message" class="message" aria-live="polite"></div>
         </div>
       </aside>
 
       <main class="canvas-wrap">
         <div class="canvas-header">
-          <div>
-            <p class="eyebrow">Infinite Canvas</p>
-            <h2>Family Relationship Map</h2>
-          </div>
           <div class="canvas-tools">
             <button id="selection-mode" type="button" class="secondary-button" aria-pressed="true">Select</button>
             <button id="pan-mode" type="button" class="secondary-button" aria-pressed="false">Pan</button>
@@ -189,7 +204,6 @@
               <div id="search-results" class="search-results" aria-label="Matching people"></div>
             </section>
             </div>
-            <span id="selection-count" role="status" aria-live="polite">0 selected</span>
             <button
               id="sidebar-toggle-button"
               type="button"
@@ -216,22 +230,17 @@
             <button id="fullscreen-button" type="button" class="secondary-button search-toggle" aria-label="Enter fullscreen" title="Fullscreen canvas (Esc to exit)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"></path></svg>
             </button>
+            <button id="relationship-labels" type="button" class="secondary-button" aria-pressed="true" title="Show or hide relationship labels">Labels</button>
             <div class="view-switch" role="tablist" aria-label="View switcher">
               <button id="canvas-tab" type="button" class="view-tab active" aria-selected="true">Canvas</button>
               <button id="table-tab" type="button" class="view-tab" aria-selected="false">Table</button>
             </div>
-            <p class="canvas-help">
-              Select: fully enclose member icons in a box, then drag any selected member to move the group. Use Pan to move the canvas; Shift-drag selects in either mode. Two-finger trackpad scroll or Cmd + mouse scroll zooms in either mode.
-            </p>
+            <span class="canvas-help" title="Fully enclose member icons to select. Trackpad scroll or Cmd + mouse scroll zooms in either mode.">Shift-drag to select · Scroll to zoom</span>
           </div>
         </div>
-        <div id="canvas-actions" class="canvas-actions" aria-label="Canvas controls">
-          <div class="zoom-controls" role="group" aria-label="Zoom controls">
-            <button id="zoom-out" type="button" class="secondary-button" aria-label="Zoom out" title="Zoom out">−</button>
-            <button id="zoom-level" type="button" class="secondary-button" aria-label="Reset zoom to 100 percent" title="Reset zoom to 100%">100%</button>
-            <button id="zoom-in" type="button" class="secondary-button" aria-label="Zoom in" title="Zoom in">+</button>
-            <button id="fit-tree" type="button" class="secondary-button" title="Fit visible members without moving them">Fit Tree</button>
-          </div>
+        <div id="canvas-view" class="view-panel active">
+        <div id="canvas-actions" class="canvas-actions" aria-label="Selected member actions" hidden>
+          <span id="selection-count" role="status" aria-live="polite">0 selected</span>
           <div class="arrange-tool">
             <button id="arrange-toggle" type="button" class="secondary-button" aria-expanded="false" aria-controls="arrange-menu" title="Select at least two members to align them" disabled>Arrange</button>
             <div id="arrange-menu" class="arrange-menu" role="group" aria-label="Arrange selected members" hidden>
@@ -253,12 +262,17 @@
           </div>
           <span id="canvas-action-status" role="status" aria-live="polite"></span>
         </div>
-        <div id="canvas-view" class="view-panel active">
           <div id="cy"></div>
           <div id="generation-controls" aria-label="Generation controls"></div>
           <div id="empty-canvas" class="empty-canvas">
             <h2>Your family tree starts here</h2>
             <p>Add your first person using the sidebar, or import a family file.</p>
+          </div>
+          <div class="zoom-controls" role="group" aria-label="Zoom controls">
+            <button id="zoom-out" type="button" class="secondary-button" aria-label="Zoom out" title="Zoom out">−</button>
+            <button id="zoom-level" type="button" class="secondary-button" aria-label="Reset zoom to 100 percent" title="Reset zoom to 100%">100%</button>
+            <button id="zoom-in" type="button" class="secondary-button" aria-label="Zoom in" title="Zoom in">+</button>
+            <button id="fit-tree" type="button" class="secondary-button" title="Fit visible members without moving them">Fit Tree</button>
           </div>
         </div>
         <div id="table-view" class="view-panel hidden">

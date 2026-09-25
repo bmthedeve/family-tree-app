@@ -2,14 +2,18 @@
 
 ## Current cloud architecture (September 2026)
 
+- The compact header exposes the active tree and save status; Tree contains New/Rename/Import/Export, and Account contains email/sign-out. Menus close on outside click or Escape and stay inside the viewport.
+- The sidebar has keyboard-accessible Member / Relationships / Tools tabs. Editing and quick-add open Member; tab changes preserve form values. Introductory copy only appears on empty trees.
+- Generation Layout is optional and undoable. `canvas-layout.js` groups spouses where compatible with a parent DAG, ranks generations top-down, and spaces members without overlap. Parent order wins when spouse grouping would create a cycle. It includes hidden descendants; both whole-tree layouts save positions and preserve manual editing afterward.
+- Reciprocal spouse/sibling records render as a single canonical edge, including incremental relationship additions. The Labels toolbar toggle hides edge text and persists as a browser preference; stored relationship data is unchanged.
 - Canvas wheel input is handled by a non-passive capture listener above Cytoscape's container: Select disables user panning, which otherwise also disables native wheel zoom in Cytoscape 3.29.2. Trackpad scrolling and Cmd/Ctrl + wheel zoom around the pointer in either mode; pixel/line/page deltas are normalized and zoom remains clamped to 20–300%. Wheel input outside the canvas is untouched.
 - Generation controls use 18px model-space buttons scaled by Cytoscape zoom, including their border and symbol; they do not stay fixed-size over zoomed-out nodes.
-- The canvas control strip contains zoom out/in, click-to-reset percentage, Fit Tree (visible elements only), and Arrange. Alignment/spacing uses `canvas-layout.js`, touches only visible selected nodes, and creates one undo snapshot per operation. Spacing has a minimum 24-unit gap.
+- Bottom-right controls contain zoom out/in, click-to-reset percentage, and Fit Tree (visible elements only). Contextual selection controls float over the canvas without shifting it: Arrange appears for multiple selected members and quick-add for one. Alignment/spacing uses `canvas-layout.js`, touches only visible selected nodes, and creates one undo snapshot per operation. Spacing has a minimum 24-unit gap.
 - Single-member selection and the sidebar editor expose quick Parent/Child/Spouse actions. The form stores a temporary relative context; save creates the person/relationship atomically and unfolds hidden ancestors, with a single history entry. Cancel and invalid input do not change the tree.
 - New nodes get collision-free positions near visible members; existing positions remain unchanged.
 - Gender is shown with both shape and color. A deceased flag or death date adds a subtle 1px dashed border, without a symbol beside the name.
 - Cmd/Ctrl + Backslash toggles the sidebar, including from form fields (except while a dialog is open). Search is now exclusively an on-demand toolbar popover in both normal and canvas-only views; it does not open the sidebar.
-- Export Tree and Import Tree are in the account bar. Imports validate the supported JSON format and use the tree-name dialog to atomically create a new document; they never overwrite the current tree. Export excludes the recycle bin.
+- Export Tree and Import Tree are in the header's Tree menu. Imports validate the supported JSON format and use the tree-name dialog to atomically create a new document; they never overwrite the current tree. Export excludes the recycle bin.
 - Pan-mode node taps open the editor, revealing the sidebar even from the separate canvas tab. Node dragging remains native. Relationship form values survive submission and dropdown refreshes.
 - Fullscreen uses a canvas-only CSS layout with optional native browser fullscreen. Esc restores the previous canvas/table view; Pan-to-edit exits fullscreen. Generation buttons have neutral 1px borders, no shadow/yellow highlight, and follow their nodes' fade opacity.
 - Person records support optional `notes`, `deceased`, and `descendantsCollapsed` fields in the existing JSON cloud document; no database migration is needed.

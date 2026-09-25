@@ -61,6 +61,16 @@ const server = http.createServer((req, res) => {
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     const visible = selector => page.locator(selector).isVisible();
+    async function sidebarTab(name) {
+      if (!await visible('#sidebar')) await page.locator('#sidebar-toggle-button').click();
+      await page.locator(`#sidebar-${name}-tab`).click();
+    }
+    async function clickAction(id) {
+      if (['new-tree', 'rename-tree', 'export-data-button', 'import-data-button'].includes(id) && !await visible('#tree-menu')) await page.locator('#tree-menu-toggle').click();
+      if (id === 'sign-out' && !await visible('#account-menu')) await page.locator('#account-menu-toggle').click();
+      if (['undo-button', 'redo-button', 'generation-layout-button', 'layout-button'].includes(id)) await sidebarTab('tools');
+      await page.locator(`#${id}`).click();
+    }
     async function login(email) {
       await page.locator('#auth-email').fill(email);
       await page.locator('#auth-password').fill('test-password-only');
@@ -68,6 +78,26 @@ const server = http.createServer((req, res) => {
       await page.locator('#workspace').waitFor({ state: 'visible' });
     }
     await login('alice@example.test');
+    assert.equal(await visible('#tree-menu'), false);
+    assert.equal(await visible('#account-menu'), false);
+    await page.locator('#tree-menu-toggle').click();
+    assert.equal(await visible('#new-tree'), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await visible('#tree-menu'), false);
+    await page.locator('#sidebar-member-tab').focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await visible('#sidebar-relationships'), true);
+    await page.keyboard.press('End');
+    assert.equal(await visible('#sidebar-tools'), true);
+    await page.keyboard.press('Home');
+    assert.equal(await visible('#sidebar-member'), true);
+    await page.locator('#name').fill('Unfinished member');
+    await sidebarTab('relationships');
+    await sidebarTab('member');
+    assert.equal(await page.locator('#name').inputValue(), 'Unfinished member');
+    await page.locator('#name').fill('');
+    assert.equal(await visible('#canvas-actions'), false);
+    assert.equal(await visible('#sidebar-intro'), true);
     assert.equal(await visible('#undo-toast'), false);
     assert.equal(await visible('#empty-canvas'), true);
     // Search is an on-demand toolbar popover, independent of sidebar visibility.
@@ -100,6 +130,8 @@ const server = http.createServer((req, res) => {
     await page.locator('#name').fill('Alice Relative');
     await page.locator('#person-submit').click();
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
+    assert.equal(await visible('#sidebar-intro'), false);
+    assert.ok((await page.locator('.canvas-header').boundingBox()).height < 130);
     assert.equal(rows.get(users['alice@example.test'].id).document.people[0].name, 'Alice Relative');
     async function clickMember(name, target = page) {
       const point = await target.evaluate(name => {
@@ -130,13 +162,13 @@ const server = http.createServer((req, res) => {
     assert.equal(await visible('#undo-toast'), true);
     await page.locator('#toast-undo-button').click();
     assert.equal(await visible('#undo-toast'), false);
-    await page.locator('#sign-out').click();
+    await clickAction('sign-out');
     await page.locator('#auth-form').waitFor({ state: 'visible' });
     await login('bob@example.test');
     assert.equal(await page.locator('#people-table-body tr').count(), 0);
     assert.equal(await page.locator('#recycle-count').textContent(), '');
     assert.equal(await page.locator('#undo-button').isDisabled(), true);
-    await page.locator('#sign-out').click();
+    await clickAction('sign-out');
     await page.locator('#auth-form').waitFor({ state: 'visible' });
     await login('alice@example.test');
     assert.equal(await page.locator('#people-table-body tr').count(), 1);
@@ -155,6 +187,7 @@ const server = http.createServer((req, res) => {
       const nodes = cy.nodes();
       return nodes.every((a, i) => nodes.every((b, j) => i === j || Math.hypot(a.position().x - b.position().x, a.position().y - b.position().y) >= 99));
     }), true);
+    await sidebarTab('relationships');
     await page.locator('#person-a').selectOption({ label: 'Alice Relative' });
     await page.locator('#person-b').selectOption({ label: 'Father' });
     await page.locator('#relationship-form button[type=submit]').click();
@@ -193,7 +226,7 @@ const server = http.createServer((req, res) => {
     await page.evaluate(() => clearHighlight());
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
     const originalTree = await page.locator('#tree-select').inputValue();
-    await page.locator('#new-tree').click();
+    await clickAction('new-tree');
     await page.locator('#tree-name').fill('Second family');
     await page.locator('#save-tree').click();
     await page.waitForFunction(() => document.querySelector('#tree-select').selectedOptions[0]?.textContent === 'Second family' && !document.querySelector('#workspace').hidden);
@@ -201,7 +234,7 @@ const server = http.createServer((req, res) => {
     assert.equal(await page.locator('#undo-button').isDisabled(), true);
     await page.locator('#name').fill('Second-tree member');
     await page.locator('#person-submit').click();
-    await page.locator('#rename-tree').click();
+    await clickAction('rename-tree');
     await page.locator('#tree-name').fill('Named second family');
     await page.locator('#save-tree').click();
     await page.waitForFunction(() => document.querySelector('#tree-select').selectedOptions[0]?.textContent === 'Named second family');
@@ -305,6 +338,7 @@ const server = http.createServer((req, res) => {
       assert.equal(await page.evaluate(() => document.body.classList.contains('canvas-fullscreen')), true);
       assert.equal(await visible('.account-bar'), false);
       assert.equal(await visible('.canvas-header'), false);
+      assert.equal(await visible('.zoom-controls'), false);
       assert.equal(await visible('#sidebar'), false);
       const full = await page.locator('#cy').boundingBox();
       const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
@@ -366,6 +400,9 @@ const server = http.createServer((req, res) => {
     await page.mouse.move(geometry.rect.x + maxX, geometry.rect.y + maxY, { steps: 20 });
     await page.mouse.up();
     await page.waitForFunction(() => cy.nodes(':selected').length === 3);
+    assert.equal(await visible('#canvas-actions'), true);
+    assert.equal(await visible('#arrange-toggle'), true);
+    assert.deepEqual(await page.locator('#cy').evaluate(el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y }; }), geometry.rect, 'Selection controls must not shift the canvas');
     const lead = geometry.nodes[0].rendered;
     await page.mouse.move(geometry.rect.x + lead.x, geometry.rect.y + lead.y);
     await page.mouse.down();
@@ -383,6 +420,12 @@ const server = http.createServer((req, res) => {
     });
     const beforeAlign = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() })));
     await page.locator('#arrange-toggle').click();
+    assert.equal(await page.evaluate(() => {
+      const before = cy.zoom();
+      const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 100 });
+      document.querySelector('#arrange-menu').dispatchEvent(event);
+      return !event.defaultPrevented && cy.zoom() === before;
+    }), true, 'Floating menus scroll without zooming the diagram');
     assert.equal(await page.locator('[data-arrange="space-x"]').isDisabled(), true);
     await page.locator('[data-arrange="top"]').click();
     const aligned = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() })));
@@ -410,7 +453,7 @@ const server = http.createServer((req, res) => {
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
     // Export the selected tree, then import it as a separate named tree.
     const downloaded = page.waitForEvent('download');
-    await page.locator('#export-data-button').click();
+    await clickAction('export-data-button');
     const download = await downloaded;
     assert.equal(download.suggestedFilename(), 'My Family Tree.familygraph.json');
     const stream = await download.createReadStream();
@@ -447,7 +490,7 @@ const server = http.createServer((req, res) => {
     await page.locator('#tree-select').selectOption(originalTree);
     await page.waitForFunction(id => !document.querySelector('#workspace').hidden && document.querySelector('#tree-select').value === id, originalTree);
     // Quick relative creation uses one atomic history/save operation in a separate tree.
-    await page.locator('#new-tree').click();
+    await clickAction('new-tree');
     await page.locator('#tree-name').fill('Quick-add test');
     await page.locator('#save-tree').click();
     await page.waitForFunction(() => !document.querySelector('#workspace').hidden && document.querySelector('#tree-select').selectedOptions[0]?.textContent === 'Quick-add test');
@@ -482,16 +525,53 @@ const server = http.createServer((req, res) => {
         const person = state.people.find(p => p.name === `Quick ${type}`);
         return state.relationships.some(r => r.type === (type === 'spouse' ? 'spouse' : 'parent') && r.from === (type === 'parent' ? person.id : anchorId) && r.to === (type === 'parent' ? anchorId : person.id));
       }, { type, anchorId }), true);
-      await page.locator('#undo-button').click();
+      await clickAction('undo-button');
       assert.equal(await page.evaluate(() => state.people.length), before.people);
       assert.equal(await page.evaluate(() => state.relationships.length), before.relationships);
-      await page.locator('#redo-button').click();
+      await clickAction('redo-button');
       assert.equal(await page.evaluate(() => state.people.length), before.people + 1);
     }
     await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
     await page.reload();
     await page.locator('#workspace').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#people-table-body tr').count(), 4);
+    assert.equal(await page.evaluate(() => state.relationships.filter(r => r.type === 'spouse').length), 2);
+    assert.equal(await page.evaluate(() => cy.edges().filter(e => e.data('relationshipType') === 'spouse').length), 1);
+    // Labels are a display preference: editability and stored relationships remain unchanged.
+    await page.locator('#relationship-labels').click();
+    assert.equal(await page.evaluate(() => cy.edges().every(e => e.style('label') === '')), true);
+    const beforeLayout = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() })));
+    await clickAction('generation-layout-button');
+    const generated = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() })));
+    assert.equal(await page.evaluate(() => state.relationships.filter(r => r.type === 'parent').every(r => cy.getElementById(r.from).position().y < cy.getElementById(r.to).position().y)), true);
+    assert.equal(await page.evaluate(() => {
+      const spouse = state.relationships.find(r => r.type === 'spouse');
+      return cy.getElementById(spouse.from).position().y === cy.getElementById(spouse.to).position().y;
+    }), true);
+    await clickAction('undo-button');
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() }))), beforeLayout);
+    await clickAction('redo-button');
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() }))), generated);
+    await page.waitForFunction(() => document.querySelector('#sync-status').textContent === 'Saved to cloud');
+    await page.reload();
+    await page.locator('#workspace').waitFor({ state: 'visible' });
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() }))), generated);
+    assert.equal(await page.locator('#relationship-labels').getAttribute('aria-pressed'), 'false');
+    assert.equal(await page.evaluate(() => cy.edges().every(e => e.style('label') === '')), true);
+    await page.evaluate(() => { cy.edges().filter(e => e.data('relationshipType') === 'spouse').emit('tap'); });
+    await page.locator('#relationship-editor-dialog').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#edit-relationship-type').inputValue(), 'spouse');
+    await page.locator('#cancel-relationship-edit').click();
+    await page.locator('#relationship-labels').click();
+    await page.locator('#fit-tree').click();
+    await page.screenshot({ path: '/tmp/family-tree-generation-layout.png' });
+    await clickAction('layout-button');
+    const freeform = await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() })));
+    await clickAction('undo-button');
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() }))), generated);
+    await clickAction('redo-button');
+    assert.deepEqual(await page.evaluate(() => cy.nodes().map(n => ({ id: n.id(), ...n.position() }))), freeform);
+    await clickAction('undo-button');
     // Table editor has the same quick actions and reveals folded ancestors on save.
     await page.getByRole('button', { name: 'Collapse descendants of Quick parent', exact: true }).click();
     await page.locator('#table-tab').click();
@@ -531,6 +611,6 @@ const server = http.createServer((req, res) => {
     assert.equal(await visible('#workspace'), false);
     assert.equal(rows.get(users['alice@example.test'].id).document.people.length, 3);
     assert.deepEqual(errors, []);
-    console.log('PASS: scaled generation controls, zoom/fit, selection alignment/spacing with undo, atomic quick parent/child/spouse creation, plus all previous browser regressions');
+    console.log('PASS: header menus, sidebar tabs, contextual controls without canvas shifts, generation/free-form layout undo/redo and persistence, single spouse edges, label preference, plus all previous browser regressions');
   } finally { await browser.close(); server.close(); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

@@ -45,6 +45,10 @@
 #file-status { font-size: 0.85rem; color: var(--muted); }
 #file-status:empty { display: none; }
 .account-bar button { padding: 7px 12px; }
+.header-popover { position: fixed; z-index: 80; width: 210px; padding: 10px; border: 1px solid var(--panel-border); border-radius: 16px; background: #fffcf5; box-shadow: var(--shadow); display: grid; gap: 6px; max-height: 60dvh; overflow: auto; }
+.header-popover button { text-align: left; border-radius: 10px; }
+.account-popover { width: min(300px, calc(100vw - 24px)); }
+.account-popover #account-email { font-size: 0.85rem; padding: 8px; }
 .tree-picker { display: flex; align-items: center; gap: 8px; }
 .tree-picker select { width: 200px; padding: 7px 12px; }
 #selection-count { font-size: 0.8rem; white-space: nowrap; align-self: center; }
@@ -83,8 +87,8 @@ body {
   display: grid;
   grid-template-columns: auto 1fr;
   height: 100vh;
-  gap: 20px;
-  padding: 20px;
+  gap: 12px;
+  padding: 12px;
 }
 
 .panel,
@@ -104,7 +108,7 @@ body {
   height: calc(100vh - 40px);
   background: var(--panel);
   backdrop-filter: blur(14px);
-  padding: 24px;
+  padding: 16px;
   overflow: hidden;
   resize: none;
 }
@@ -115,6 +119,12 @@ body {
   overflow: auto;
   padding-right: 4px;
 }
+.sidebar-tabs { display: grid; grid-template-columns: 1fr 1.5fr 0.8fr; gap: 4px; flex-shrink: 0; margin-bottom: 14px; background: #231d1408; padding: 4px; border-radius: 14px; }
+.sidebar-tabs button { padding: 9px 3px; border-radius: 10px; background: transparent; font-size: 0.76rem; }
+.sidebar-tabs button[aria-selected="true"] { background: #fffaf1; box-shadow: 0 2px 8px #231d1412; font-weight: 800; }
+#sidebar-intro h1 { font-size: 1.35rem; }
+#sidebar-intro .panel-copy { font-size: 0.85rem; }
+#sidebar-relationships #manage-relationships-button { margin-top: 16px; width: 100%; }
 
 .search-tool { position: relative; }
 
@@ -386,13 +396,17 @@ textarea { resize: vertical; }
 .canvas-header {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
-  align-items: flex-start;
-  padding: 24px 24px 0;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--panel-border);
 }
 
-.canvas-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 24px 12px; }
+.canvas-actions { position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px); z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--panel-border); border-radius: 18px; background: #fffcf5; box-shadow: 0 4px 18px #231d1414; }
 .zoom-controls, .relative-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.zoom-controls { position: absolute; bottom: 16px; right: 16px; z-index: 10; padding: 6px; border: 1px solid var(--panel-border); border-radius: 18px; background: #fffcf5; box-shadow: 0 4px 18px #231d1414; }
+.zoom-controls button { padding: 8px 10px; font-size: 0.82rem; }
 .canvas-actions button, .relative-actions button { padding: 8px 12px; font-size: 0.82rem; }
 #zoom-level { min-width: 64px; font-variant-numeric: tabular-nums; }
 #quick-member-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
@@ -406,17 +420,19 @@ textarea { resize: vertical; }
 .canvas-tools {
   flex: 1;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 12px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
 }
+.canvas-tools > button:not(.expand-button) { padding: 9px 12px; }
+.canvas-tools .canvas-help { margin-left: auto; font-size: 0.75rem; max-width: 190px; }
 
 .expand-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.76);
@@ -619,6 +635,7 @@ body.canvas-fullscreen .account-bar,
 body.canvas-fullscreen .panel,
 body.canvas-fullscreen .canvas-header,
 body.canvas-fullscreen .canvas-actions,
+body.canvas-fullscreen .zoom-controls,
 body.canvas-fullscreen .sidebar-resize-handle,
 body.canvas-fullscreen #tooltip,
 body.canvas-fullscreen #undo-toast,

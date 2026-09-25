@@ -12,6 +12,7 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Create, rename, and switch between any number of private trees, subject to your Supabase storage quota
 - Empty starting canvas and private cloud storage for each account
 - Save status, retry, draft recovery, and protection against stale-tab overwrites
+- Compact Tree and Account menus, with Member / Relationships / Tools sidebar tabs
 - Add, edit, and delete family members
 - Place new members in free space beside existing members without overlapping them
 - Distinguish male members with blue rounded squares and female members with pink circles
@@ -26,6 +27,8 @@ Use the app on GitHub Pages: [bmthedeve.github.io/family-tree-app](https://bmthe
 - Explore relationships on an interactive, zoomable Cytoscape.js canvas
 - Drag a selection rectangle in **Select** mode, then move all selected people together; use **Pan** to move the canvas
 - Align selected members or give them equal horizontal/vertical spacing, with Undo/Redo
+- Optionally arrange the whole tree by generation, grouping spouses and placing parents above children, with Undo/Redo
+- Show one connector per relationship and toggle relationship labels for a quieter canvas
 - Use zoom buttons, a live zoom percentage, and Fit Tree without rearranging member positions
 - Quick-add a selected member's parent, child, or spouse with the relationship created automatically
 - Highlight a person's immediate family by selecting their node
@@ -58,7 +61,9 @@ The Supabase client, Cytoscape.js library, and Manrope font load from public CDN
 
 ## Using the app
 
-The account bar contains a **Family tree** picker, **New Tree**, **Rename**, **Export Tree**, and **Import Tree**. Existing trees are preserved as **My Family Tree** after applying the [named-tree migration](supabase/migrations/202609240001_named_family_trees.sql). Each tree has its own people, relationships, recycle bin, recovery draft, and save revision. Switching waits for pending saves and clears the previous tree's undo history.
+The compact account bar contains a **Family tree** picker and cloud save status. Open **Tree** for **New Tree**, **Rename**, **Export Tree**, and **Import Tree**; open **Account** for your email and sign-out. Existing trees are preserved as **My Family Tree** after applying the [named-tree migration](supabase/migrations/202609240001_named_family_trees.sql). Each tree has its own people, relationships, recycle bin, recovery draft, and save revision. Switching waits for pending saves and clears the previous tree's undo history.
+
+The sidebar has **Member**, **Relationships**, and **Tools** tabs. Editing or quick-adding a person opens Member automatically. Switching tabs keeps unfinished form values. The introductory text disappears once a tree has members. Tabs support Left/Right arrows and Home/End for keyboard navigation.
 
 Choose a tree and click **Export Tree** to download its `.familygraph.json` file, including its name, people, metadata, relationships, positions, and collapsed-generation settings (not its recycle bin). **Import Tree** accepts these files and legacy JSON files containing `people` and `relationships`. Confirm or change the name in the import dialog to create a separate private tree; existing trees are never replaced. Invalid files are rejected before creating a tree. GEDCOM and files from other genealogy tools are not currently supported.
 
@@ -66,7 +71,7 @@ Choose a tree and click **Export Tree** to download its `.familygraph.json` file
 
 In **Pan** mode, click a member to open the sidebar directly in edit mode. Dragging a member still moves it without opening the form. The **Fullscreen** button hides the account bar, sidebar, and canvas toolbar. Press <kbd>Esc</kbd> to restore the previous view, or click a member in Pan mode to leave fullscreen and edit. When native browser fullscreen is unavailable, the same distraction-free layout fills the browser viewport. The separate canvas-tab button remains available as well.
 
-The canvas control strip provides **− / +** zoom buttons, the current zoom percentage (click it for 100%), and **Fit Tree** to frame all visible members without changing their positions. Generation −/+ buttons scale with the diagram, including at low zoom levels.
+The bottom-right canvas controls provide **− / +** zoom buttons, the current zoom percentage (click it for 100%), and **Fit Tree** to frame all visible members without changing their positions. Generation −/+ buttons scale with the diagram, including at low zoom levels. Selection actions appear only when relevant and float over the canvas without shifting the diagram. Use **Labels** in the top toolbar to hide or show relationship text; this browser preference survives reloads.
 
 In either **Select** or **Pan** mode, use a two-finger up/down trackpad scroll or **Cmd + mouse-wheel scroll** over the canvas to zoom around the pointer. Ordinary mouse-wheel scrolling and Ctrl + scroll also work. Canvas scrolling changes the diagram zoom, not the browser page zoom; scrolling outside the canvas behaves normally. Zoom pauses while a mouse button is held for dragging or box selection.
 
@@ -74,16 +79,18 @@ Select at least two members and open **Arrange** for left/right/top/bottom align
 
 Select one member to reveal **+ Parent**, **+ Child**, and **+ Spouse** beside their name in the canvas controls. These actions also appear above the sidebar editor when editing a person. Fill in the new relative's details and save to create both the member and their relationship as one undoable change. Cancel makes no changes. Parents start above, children below, and spouses beside the chosen member where space allows; occupied positions are avoided. Hidden ancestor branches open so the new relative can be seen. Spouses start with current status; edit the relationship to add dates or change status.
 
-1. Add people from the sidebar.
+1. Add people from the sidebar's **Member** tab.
 2. Click the magnifying glass beside Select/Pan to open **Find Person**, even with the sidebar closed. Choose a result to center and highlight that person. The popover closes after choosing a result, clicking outside, or pressing Esc.
-3. Choose two people and define their relationship. Person A, Person B, and relationship details remain selected after adding the relationship. Spouse relationships can include status and dates.
+3. In **Relationships**, choose two people and define their relationship. Person A, Person B, and relationship details remain selected after adding the relationship. Spouse relationships can include status and dates.
 4. Select a graph edge or use **Manage Relationships** to edit or delete a connection.
 5. Drag nodes to organize the graph, scroll to zoom, or drag the background to pan.
 6. Use the sidebar button or <kbd>Cmd/Ctrl</kbd> + <kbd>\\</kbd> to toggle between editing controls and a full-width canvas. The shortcut also works while typing in a form, but not while a dialog is open.
-7. Use **Re-run Layout** to automatically arrange the family network.
+7. In **Tools**, use **Generation Layout** for a top-down tree or **Free-form Layout** for a force-directed arrangement. Both are optional and undoable; manual positions remain unchanged until you apply a layout.
 8. Use **Export Tree** to create an editable backup that can later be restored as a new tree with **Import Tree**.
 
 Use the on-screen controls or <kbd>Ctrl/Cmd</kbd> + <kbd>Z</kbd> to undo and <kbd>Ctrl/Cmd</kbd> + <kbd>Y</kbd> (or <kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>) to redo. Deleted people remain available in the Recycle Bin until they are permanently removed.
+
+**Generation Layout** places parents above children and groups spouses on the same row where possible. In complex families where spouse grouping conflicts with ancestor order, parent order takes priority and the app reports the exception. It arranges all members, including collapsed descendants, without changing relationships or collapsed branches. Positions save to the active tree and remain manually adjustable afterward.
 
 Use the pencil icon to edit a person's notes or deceased status. A death date also marks a person as deceased. Hover over a member to read their notes. Generation controls hide all descendants reachable through parent links, including shared descendants; no people or relationships are deleted. Nested collapsed branches remain collapsed when their ancestor is expanded. Search automatically opens branches hiding its result. Notes and branch preferences are saved with your tree and included in family-file exports.
 
@@ -100,7 +107,7 @@ The app stores data as a graph:
 }
 ```
 
-Parent relationships are stored as `parent -> child`. A relationship entered as `child` is normalized to that format. Spouse and sibling relationships are stored in both directions. Removing a person also removes every relationship connected to them.
+Parent relationships are stored as `parent -> child`. A relationship entered as `child` is normalized to that format. Spouse and sibling relationships are stored in both directions, but render as one connector per pair. Removing a person also removes every relationship connected to them.
 
 ## Project structure
 
@@ -109,7 +116,7 @@ Parent relationships are stored as `parent -> child`. A relationship entered as 
 ├── index.html        # Application markup
 ├── style.css         # Layout and visual styling
 ├── script.js         # State, graph rendering, and interactions
-├── canvas-layout.js  # Pure selected-member alignment and spacing calculations
+├── canvas-layout.js  # Pure alignment, spacing, and generation-layout calculations
 ├── cloud-store.js    # Account-scoped cloud persistence and write conflicts
 ├── supabase-config.js # Public project URL and publishable key
 ├── supabase/         # Database migration and setup instructions

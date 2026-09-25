@@ -101,11 +101,13 @@ let fullscreenView = null;
 let nativeFullscreenEntered = false;
 let quickAddContext = null;
 let searchJumpTimer = null;
+let showRelationshipLabels = true;
 
 initialize();
 startCloudAuth();
 
 function initialize() {
+  try { showRelationshipLabels = localStorage.getItem("family-tree-show-labels-v1") !== "false"; } catch { /* Optional UI preference. */ }
   applyMode();
   restoreSidebarWidth();
   restoreSidebarState();
@@ -286,7 +288,8 @@ function getStyles() {
         "z-index": 999
       }
     },
-    { selector: ".generation-hidden", style: { display: "none" } }
+    { selector: ".generation-hidden", style: { display: "none" } },
+    { selector: "edge.labels-hidden", style: { label: "" } }
   ];
 }
 
@@ -304,8 +307,8 @@ function buildElements() {
     }
   }));
 
-  const edges = state.relationships.map((relationship) => ({
-    data: edgeData(relationship)
+  const edges = getCanonicalRelationships().map((relationship) => ({
+    data: edgeData(relationship), classes: showRelationshipLabels ? "" : "labels-hidden"
   }));
 
   return [...nodes, ...edges];
@@ -313,7 +316,7 @@ function buildElements() {
 
 function edgeData(relationship) {
   return {
-    id: `${relationship.type}:${relationship.from}:${relationship.to}`,
+    id: relationshipGroupKey(relationship),
     source: relationship.from,
     target: relationship.to,
     relationshipType: relationship.type,
@@ -419,6 +422,41 @@ function relationshipColor(type) {
 }
 
 function attachEvents() {
+  document.querySelectorAll("[data-sidebar-tab]").forEach(button => {
+    button.addEventListener("click", () => setSidebarTab(button.dataset.sidebarTab));
+    button.addEventListener("keydown", event => {
+      const tabs = [...document.querySelectorAll("[data-sidebar-tab]")];
+      let index = tabs.indexOf(button);
+      if (event.key === "ArrowRight") index = (index + 1) % tabs.length;
+      else if (event.key === "ArrowLeft") index = (index + tabs.length - 1) % tabs.length;
+      else if (event.key === "Home") index = 0;
+      else if (event.key === "End") index = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      setSidebarTab(tabs[index].dataset.sidebarTab);
+      tabs[index].focus();
+    });
+  });
+  for (const name of ["tree", "account"]) {
+    document.getElementById(`${name}-menu-toggle`).addEventListener("click", () => {
+      const menu = document.getElementById(`${name}-menu`), open = menu.hidden;
+      closeHeaderMenus();
+      menu.hidden = !open;
+      document.getElementById(`${name}-menu-toggle`).setAttribute("aria-expanded", String(open));
+      if (open) positionToolbarPanel(menu, document.getElementById(`${name}-menu-toggle`));
+    });
+    document.getElementById(`${name}-menu`).addEventListener("click", event => {
+      if (event.target.closest("button")) closeHeaderMenus();
+    });
+  }
+  document.getElementById("relationship-labels").setAttribute("aria-pressed", String(showRelationshipLabels));
+  document.getElementById("relationship-labels").addEventListener("click", () => {
+    showRelationshipLabels = !showRelationshipLabels;
+    cy.edges().toggleClass("labels-hidden", !showRelationshipLabels);
+    document.getElementById("relationship-labels").setAttribute("aria-pressed", String(showRelationshipLabels));
+    try { localStorage.setItem("family-tree-show-labels-v1", String(showRelationshipLabels)); } catch { /* Optional UI preference. */ }
+  });
+  document.getElementById("generation-layout-button").addEventListener("click", applyGenerationLayout);
   attachContainedBoxSelection();
   // Cytoscape 3.29 gates wheel zoom on userPanningEnabled, which Select disables.
   // Capture above its container so both modes share one zoom path, not two.
@@ -446,12 +484,17 @@ function attachEvents() {
   cy.on("add remove select unselect", "node", () => queueMicrotask(updateCanvasControls));
   refs.findPersonButton.addEventListener("click", openPersonSearch);
   document.addEventListener("pointerdown", event => {
+    if (!event.target.closest(".header-menu")) closeHeaderMenus();
     if (!event.target.closest(".arrange-tool")) closeArrangeMenu();
     if (!refs.searchPanel.contains(event.target) && !refs.findPersonButton.contains(event.target)) {
       closeFloatingSearch();
     }
   });
   document.addEventListener("scroll", event => {
+    for (const name of ["tree", "account"]) {
+      const menu = document.getElementById(`${name}-menu`);
+      if (!menu.hidden && !menu.contains(event.target)) positionToolbarPanel(menu, document.getElementById(`${name}-menu-toggle`));
+    }
     if (!refs.searchPanel.hidden && !refs.searchPanel.contains(event.target)) positionPersonSearch();
     const arrangeMenu = document.getElementById("arrange-menu");
     if (!arrangeMenu.hidden && !arrangeMenu.contains(event.target)) positionToolbarPanel(arrangeMenu, document.getElementById("arrange-toggle"));
@@ -499,7 +542,7 @@ function attachEvents() {
   refs.confirmDeleteRelationship.addEventListener("click", confirmRelationshipDeletion);
   refs.closeRecycleBin.addEventListener("click", () => refs.recycleBinDialog.close());
   refs.recycleBinList.addEventListener("click", handleRecycleBinAction);
-  refs.layoutButton.addEventListener("click", () => runLayout(true, true));
+  refs.layoutButton.addEventListener("click", () => { if (state.people.length) { recordHistory("Free-form layout"); runLayout(true, true); } });
   refs.resetViewButton.addEventListener("click", resetView);
   refs.exportButton.addEventListener("click", exportPng);
   refs.exportDataButton.addEventListener("click", exportFamilyFile);
@@ -651,7 +694,7 @@ function addPerson(personInput, relative = null) {
     const connections = relative.type === "spouse" ? [relationship, { ...relationship, from: person.id, to: relative.personId }] : [relationship];
     connections.forEach(connection => {
       state.relationships.push(connection);
-      cy.add({ group: "edges", data: edgeData(connection) });
+      addGraphRelationship(connection);
     });
     state.people.forEach(member => {
       if (member.descendantsCollapsed && (member.id === relative.personId || descendantsOf(member.id).has(relative.personId))) member.descendantsCollapsed = false;
@@ -758,10 +801,7 @@ function addRelationship({ from, to, type, status = "current", startDate = "", e
   recordHistory(`Add ${normalizedType} relationship`);
   newRelationships.forEach((relationship) => {
     state.relationships.push(relationship);
-    cy.add({
-      group: "edges",
-      data: edgeData(relationship)
-    });
+    addGraphRelationship(relationship);
   });
 
   saveState();
@@ -774,6 +814,11 @@ function relationshipExists(from, to, type) {
     (relationship) =>
       relationship.from === from && relationship.to === to && relationship.type === type
   );
+}
+
+function addGraphRelationship(relationship) {
+  const data = edgeData(relationship);
+  if (cy.getElementById(data.id).empty()) cy.add({ group: "edges", data, classes: showRelationshipLabels ? "" : "labels-hidden" });
 }
 
 function createsAncestorLoop(parentId, childId, relationships) {
@@ -1093,7 +1138,7 @@ function runLayout(fitView = false, forceAutoLayout = false) {
   const layoutName = forceAutoLayout ? "cose" : hasSavedPositions ? "preset" : "cose";
   const layout = cy.layout({
     name: layoutName,
-    animate: layoutName !== "preset",
+    animate: false,
     fit: fitView,
     padding: getFitPadding(),
     nodeRepulsion: 160000,
@@ -1254,6 +1299,7 @@ function populateEditPersonSelects() {
 }
 
 function refreshStats() {
+  document.getElementById("sidebar-intro").hidden = state.people.length > 0;
   refs.stats.textContent = `${state.people.length} people, ${state.relationships.length} stored relationships`;
 }
 
@@ -1313,7 +1359,7 @@ function setActiveView(view) {
   refs.tableTab.classList.toggle("active", !showCanvas);
   refs.canvasTab.setAttribute("aria-selected", String(showCanvas));
   refs.tableTab.setAttribute("aria-selected", String(!showCanvas));
-  document.getElementById("canvas-actions").hidden = !showCanvas;
+  updateCanvasControls();
   closeArrangeMenu();
 
   if (showCanvas) {
@@ -1476,6 +1522,7 @@ function handleWindowResize() {
   cy.stop(true);
   cy.resize();
   cy.fit(undefined, getFitPadding());
+  closeHeaderMenus();
   if (!refs.searchPanel.hidden) positionPersonSearch();
   const arrangeMenu = document.getElementById("arrange-menu");
   if (!arrangeMenu.hidden) positionToolbarPanel(arrangeMenu, document.getElementById("arrange-toggle"));
@@ -1491,6 +1538,8 @@ function setCanvasTool(tool) {
 
 function handleCanvasWheel(event) {
   if (cloudApplying || !activeUserId || refs.canvasView.classList.contains("hidden")) return;
+  // Floating tool menus must keep their own scrolling instead of zooming the graph.
+  if (event.target.closest(".canvas-actions, .zoom-controls")) return;
   event.preventDefault();
   event.stopPropagation();
   // Do not change the coordinate system during a node drag or selection gesture.
@@ -1530,6 +1579,8 @@ function updateCanvasControls() {
   document.getElementById("zoom-in").disabled = cy.zoom() >= cy.maxZoom() - 0.0001;
   document.getElementById("zoom-out").disabled = cy.zoom() <= cy.minZoom() + 0.0001;
   document.getElementById("arrange-toggle").disabled = selected.length < 2;
+  document.querySelector(".arrange-tool").hidden = selected.length < 2;
+  document.getElementById("canvas-actions").hidden = refs.canvasView.classList.contains("hidden") || selected.length === 0;
   if (selected.length < 2) closeArrangeMenu();
   document.querySelectorAll("[data-arrange^='space']").forEach(button => { button.disabled = selected.length < 3; });
   document.getElementById("member-quick-actions").hidden = selected.length !== 1;
@@ -1560,6 +1611,7 @@ async function startQuickAdd(personId, type) {
   if (!person || !["parent", "child", "spouse"].includes(type)) return;
   await exitCanvasFullscreen();
   resetPersonForm();
+  setSidebarTab("member");
   quickAddContext = { personId, type };
   document.body.classList.remove("canvas-only-mode");
   if (document.body.classList.contains("sidebar-collapsed")) toggleSidebar();
@@ -1604,6 +1656,7 @@ function startEditingPerson(personId) {
   }
 
   document.body.classList.remove("canvas-only-mode");
+  setSidebarTab("member");
   requestAnimationFrame(handleWindowResize);
   if (document.body.classList.contains("sidebar-collapsed")) {
     toggleSidebar();
@@ -1638,6 +1691,38 @@ function resetPersonForm() {
   refs.personSubmit.textContent = "Add Person";
   document.getElementById("person-form-title").textContent = "Add Person";
   refs.personCancel.classList.add("hidden-button");
+}
+
+function setSidebarTab(name) {
+  document.querySelectorAll("[data-sidebar-tab]").forEach(button => {
+    const active = button.dataset.sidebarTab === name;
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+    document.getElementById(`sidebar-${button.dataset.sidebarTab}`).hidden = !active;
+  });
+  document.querySelector(".sidebar-content").scrollTop = 0;
+}
+
+function closeHeaderMenus() {
+  for (const name of ["tree", "account"]) {
+    document.getElementById(`${name}-menu`).hidden = true;
+    document.getElementById(`${name}-menu-toggle`).setAttribute("aria-expanded", "false");
+  }
+}
+
+function applyGenerationLayout() {
+  if (!state.people.length) return;
+  try {
+    const result = generationLayout(state.people, state.relationships);
+    recordHistory("Generation layout");
+    clearTimeout(searchJumpTimer);
+    cy.stop(true);
+    cy.batch(() => result.positions.forEach(position => cy.getElementById(position.id).position({ x: position.x, y: position.y })));
+    saveState();
+    setActiveView("canvas");
+    fitVisibleTree();
+    showMessage(result.separatedSpouses ? `Generation layout applied. ${result.separatedSpouses} spouse connection(s) remain on separate rows to preserve parent order.` : "Generation layout applied. Undo restores your previous positions.");
+  } catch (error) { showMessage(error.message, true); }
 }
 
 function requestPersonDeletion(personId) {
@@ -1939,6 +2024,14 @@ function jumpToPerson(personId) {
 }
 
 function handleHistoryShortcut(event) {
+  if (event.key === "Escape") {
+    const openMenu = ["tree", "account"].find(name => !document.getElementById(`${name}-menu`).hidden);
+    if (openMenu) {
+      closeHeaderMenus();
+      document.getElementById(`${openMenu}-menu-toggle`).focus();
+      return;
+    }
+  }
   if (event.key === "Escape" && !document.getElementById("arrange-menu").hidden) {
     closeArrangeMenu();
     document.getElementById("arrange-toggle").focus();
@@ -2154,6 +2247,8 @@ async function applyAccountSession(session, force = false, requestedTreeId = nul
   const user = session?.user;
   if (!force && user && user.id === activeUserId) return;
   const generation = ++sessionGeneration;
+  closeHeaderMenus();
+  setSidebarTab("member");
   clearTimeout(searchJumpTimer);
   // A previous tree's camera animation must not move the new tree off screen.
   cy.stop(true);
